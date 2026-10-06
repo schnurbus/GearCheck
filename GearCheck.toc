@@ -1,0 +1,16 @@
+## Interface: 30300
+## Title: GearCheck
+## Notes: Checks spec, gear, sockets and enchants for your target or group.
+## Notes-deDE: Prüft Skillung, Ausrüstung, Sockel und Verzauberungen von Ziel und Gruppe.
+## Author: GearCheck
+## Version: 1.0.0
+## SavedVariables: GearCheckDB
+
+Core.lua
+Locale.lua
+Data.lua
+Roles.lua
+Classify.lua
+Scan.lua
+Whisper.lua
+UI.lua
