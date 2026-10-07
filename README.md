@@ -27,6 +27,8 @@ Dieselben Aktionen liegen im Fenster auf den Schaltflächen **Ziel prüfen**, **
 
 Links steht die Spielerliste, eingefärbt nach Klasse. Rechts daneben die Rolle und die Zahl der Befunde, oder `OK`, wenn nichts auffällt. Ein Klick auf einen Namen öffnet die Details: Klasse, Stufe, durchschnittliche Gegenstandsstufe, Talentverteilung und die Ausrüstung. Die Maus über einem Slot zeigt den Gegenstandstooltip. Umschalt-Klick fügt den Gegenstandslink in den Chat ein.
 
+Beim Betrachten eines anderen Charakters sitzt rechts direkt am Betrachten-Fenster ein weiteres Fenster. Darin stehen Rolle, Talentverteilung, Gegenstandsstufe und die Befunde. Der Pfeil oben klappt es ein und aus; die Wahl bleibt gespeichert. Gibt es Befunde, liegt unten **Fehler flüstern**. Die Nachfrage schickt sie nur an diesen Spieler.
+
 Farben an den Slots:
 
 - Grün: der Gegenstand passt zur erkannten Rolle.

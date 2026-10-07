@@ -8,6 +8,8 @@ local INSPECT_LIMIT = 6
 local INSPECT_WINDOW = 11
 local TALENT_TIMEOUT = 2
 local GEM_TIMEOUT = 2.5
+Scan.TALENT_TIMEOUT = TALENT_TIMEOUT
+Scan.GEM_TIMEOUT = GEM_TIMEOUT
 
 Scan.status = GearCheck:T("READY")
 Scan.inspectsLeft = INSPECT_LIMIT
@@ -53,6 +55,9 @@ function Scan:UpdateUI()
 	if GearCheck.UI and GearCheck.UI.Refresh then
 		GearCheck.UI:Refresh()
 	end
+	if GearCheck.InspectView and GearCheck.InspectView.Refresh then
+		GearCheck.InspectView:Refresh()
+	end
 end
 
 function Scan:Wake()
@@ -61,6 +66,8 @@ end
 
 function Scan:NoteInspect(unit)
 	if type(unit) ~= "string" then return end
+	self.lastUnit = unit
+	self.lastGuid = UnitGUID(unit)
 	if UnitIsUnit(unit, "player") then return end
 	if UnitIsDeadOrGhost(unit) then return end
 	if not CanInspect(unit) then return end
@@ -161,6 +168,7 @@ function Scan:ApplyResult(record, unit, spec)
 	record.role = spec.role
 	record.roleLabel = spec.label
 	record.trees = spec.trees
+	record.secondary = spec.secondary
 	record.status = "done"
 	record.statusText = nil
 	record.gear = GearCheck.Classify.Gear(unit, {
@@ -250,6 +258,16 @@ function Scan:OnTalentReady()
 	local active = self.active
 	if not active or active.phase ~= "talent" then return end
 	local record = active.record
+	if self.lastGuid and record.guid and self.lastGuid ~= record.guid then
+		record.status = "pending"
+		table.insert(self.queue, 1, record)
+		self:ClearWatch()
+		if InspectFrame and InspectFrame:IsShown() then
+			self.held = true
+		end
+		self:UpdateUI()
+		return
+	end
 	local unit = self:Resolve(record)
 	if not unit then
 		self:FailActive(GearCheck:T("LEFT_RANGE"))
@@ -285,7 +303,33 @@ function Scan:Begin(record, unit)
 	NotifyInspect(unit)
 end
 
+function Scan:HoldInspect(guid)
+	self.held = true
+	self.resumeAfter = nil
+	local active = self.active
+	if not active or not active.record then return end
+	if guid and active.record.guid == guid then return end
+	local record = active.record
+	record.status = "pending"
+	table.insert(self.queue, 1, record)
+	self:ClearWatch()
+	self:UpdateUI()
+end
+
+function Scan:ReleaseInspect()
+	if not self.held then return end
+	self.resumeAfter = GetTime() + 0.3
+	if self.running or #self.queue > 0 then
+		self:Wake()
+	end
+end
+
 function Scan:Tick()
+	if self.held and self.resumeAfter and GetTime() >= self.resumeAfter then
+		self.held = false
+		self.resumeAfter = nil
+	end
+
 	if self.active then
 		if self.active.phase == "talent" and GetTime() > self.active.deadline then
 			self:FailActive(GearCheck:T("INSPECT_FAILED"))
@@ -296,6 +340,10 @@ function Scan:Tick()
 				self:FinishActive()
 			end
 		end
+		return
+	end
+
+	if self.held then
 		return
 	end
 

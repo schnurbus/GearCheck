@@ -20,6 +20,7 @@ local en = {
 	DONE = "Done. %d checked, %d with issues, %d out of range.",
 	HELP = "Commands: /gc, /gc target, /gc group, /gc whisper",
 	UNSPENT = " (%d unspent)",
+	SECOND_SPEC = "2nd Spec",
 
 	ROLE_TANK = "Tank",
 	ROLE_DAMAGE = "Damage",
@@ -79,6 +80,8 @@ local en = {
 	BUTTON_TARGET = "Check target",
 	BUTTON_GROUP = "Check group",
 	BUTTON_WHISPER = "Whisper issues",
+	COLLAPSE = "Collapse",
+	EXPAND = "Expand",
 	BUTTON_WHISPER_COUNT = "Whisper issues (%d)",
 	WHISPERING = "Whispering...",
 
@@ -111,6 +114,7 @@ local de = {
 	DONE = "Fertig. %d geprüft, %d mit Befunden, %d nicht erreichbar.",
 	HELP = "Befehle: /gc, /gc ziel, /gc gruppe, /gc flüstern",
 	UNSPENT = " (%d unvergeben)",
+	SECOND_SPEC = "2nd Spec",
 
 	ROLE_TANK = "Tank",
 	ROLE_DAMAGE = "Schaden",
@@ -170,6 +174,8 @@ local de = {
 	BUTTON_TARGET = "Ziel prüfen",
 	BUTTON_GROUP = "Gruppe prüfen",
 	BUTTON_WHISPER = "Fehler flüstern",
+	COLLAPSE = "Einklappen",
+	EXPAND = "Ausklappen",
 	BUTTON_WHISPER_COUNT = "Fehler flüstern (%d)",
 	WHISPERING = "Flüstert...",
 

@@ -117,6 +117,28 @@ function Whisper:Confirm()
 	end
 end
 
+function Whisper:ConfirmOne(record)
+	if self:IsBusy() then
+		GearCheck:Print(GearCheck:T("WHISPER_BUSY"))
+		return
+	end
+	local issues = record and record.issues
+	if not record or record.isPlayer or record.status ~= "done" or not issues or #issues == 0 then
+		GearCheck:Print(GearCheck:T("WHISPER_NONE"))
+		return
+	end
+	if not record.name or record.name == "?" or record.name == UNKNOWN then
+		GearCheck:Print(GearCheck:T("WHISPER_NONE"))
+		return
+	end
+	self.pending = { record }
+	StaticPopupDialogs["GEARCHECK_WHISPER"].text = GearCheck:T("WHISPER_ONE")
+	if StaticPopup_Visible("GEARCHECK_WHISPER") then
+		StaticPopup_Hide("GEARCHECK_WHISPER")
+	end
+	StaticPopup_Show("GEARCHECK_WHISPER")
+end
+
 function Whisper:Start()
 	local targets = self.pending or {}
 	self.pending = nil
@@ -151,6 +173,9 @@ function Whisper:Tick()
 	self.nextAt = GetTime() + INTERVAL
 	if GearCheck.UI then
 		GearCheck.UI:Refresh()
+	end
+	if GearCheck.InspectView and GearCheck.InspectView.Refresh then
+		GearCheck.InspectView:Refresh()
 	end
 	if #self.queue == 0 then
 		self.frame:Hide()

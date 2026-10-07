@@ -258,7 +258,7 @@ local function averageLevel(gear)
 	return math.floor(sum / count + 0.5)
 end
 
-local function summaryText(record)
+function UI:SummaryText(record)
 	if not record then
 		return GearCheck:T("PROMPT")
 	end
@@ -281,13 +281,17 @@ local function summaryText(record)
 		lines[#lines + 1] = header
 	end
 	lines[#lines + 1] = (record.roleLabel or GearCheck:T("ROLE_UNKNOWN")) .. "  " .. (record.trees or "")
+	if record.secondary then
+		local second = record.secondary
+		lines[#lines + 1] = GearCheck:T("SECOND_SPEC") .. "  " .. (second.label or GearCheck:T("ROLE_UNKNOWN")) .. "  " .. (second.trees or "")
+	end
 	if record.note then
 		lines[#lines + 1] = "|cffffff80" .. record.note .. "|r"
 	end
 	return table.concat(lines, "\n")
 end
 
-local function issuesText(record)
+function UI:IssuesText(record)
 	if not record or record.status ~= "done" then
 		return ""
 	end
@@ -485,7 +489,7 @@ function UI:Refresh()
 	end
 	local textWidth = math.max((detailScroll:GetWidth() or 480) - 28, 160)
 	summary:SetWidth(textWidth)
-	local summaryString = summaryText(record)
+	local summaryString = self:SummaryText(record)
 	summary:SetText(summaryString)
 	local summaryHeight = summary:GetStringHeight() or 0
 	if summaryString ~= "" and summaryHeight < 1 then
@@ -504,7 +508,7 @@ function UI:Refresh()
 	body:ClearAllPoints()
 	body:SetPoint("TOPLEFT", detailContent, "TOPLEFT", 4, -issuesTop)
 	body:SetWidth(textWidth)
-	body:SetText(issuesText(record))
+	body:SetText(self:IssuesText(record))
 	local issuesHeight = body:GetStringHeight() or 0
 	detailContent:SetWidth(math.max(textWidth + 8, GEAR_COL * 2 + 4))
 	detailContent:SetHeight(math.max(issuesTop + issuesHeight + 12, 1))

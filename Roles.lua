@@ -52,19 +52,13 @@ local function countTankMatches(classToken, inspect, group)
 	return found
 end
 
-function Roles.Read(classToken, inspect)
+local function readGroup(classToken, inspect, group)
 	local result = {
 		role = "unknown",
 		label = Data.RoleLabel("unknown"),
 		trees = "0/0/0",
 		class = classToken,
 	}
-	if not classToken or not Data.treeRole[classToken] then
-		return result
-	end
-
-	inspect = inspect and true or false
-	local group = GetActiveTalentGroup(inspect) or 1
 	local first = talentPoints(1, inspect, group)
 	local second = talentPoints(2, inspect, group)
 	local third = talentPoints(3, inspect, group)
@@ -94,5 +88,27 @@ function Roles.Read(classToken, inspect)
 	local treeIndex = first == highest and 1 or second == highest and 2 or 3
 	result.role = Data.treeRole[classToken][treeIndex] or "unknown"
 	result.label = Data.RoleLabel(result.role)
+	return result
+end
+
+function Roles.Read(classToken, inspect)
+	local empty = {
+		role = "unknown",
+		label = Data.RoleLabel("unknown"),
+		trees = "0/0/0",
+		class = classToken,
+	}
+	if not classToken or not Data.treeRole[classToken] then
+		return empty
+	end
+
+	inspect = inspect and true or false
+	local active = GetActiveTalentGroup(inspect) or 1
+	local result = readGroup(classToken, inspect, active)
+	local groups = GetNumTalentGroups(inspect) or 1
+	if groups > 1 then
+		local other = active == 1 and 2 or 1
+		result.secondary = readGroup(classToken, inspect, other)
+	end
 	return result
 end
