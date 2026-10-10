@@ -125,6 +125,7 @@ Data.enchants = {
 	[3595] = { pvp = true }, -- Rune des Zauberzerbrechens
 	[3883] = { tank = true }, -- Rune des nerubischen Panzers
 	[3847] = { tank = true }, -- Rune des Steinhautgargoyles
+	[2673] = { tank = true, damage = true }, -- Mungo
 	[3225] = { damage = true }, -- Henker
 	[3789] = { damage = true }, -- Berserker
 	[3790] = { damage = true, caster = true }, -- Schwarzmagie
