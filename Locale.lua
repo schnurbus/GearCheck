@@ -20,6 +20,7 @@ local en = {
 	DONE = "Done. %d checked, %d with issues, %d out of range.",
 	HELP = "Commands: /gc, /gc target, /gc group, /gc whisper",
 	UNSPENT = " (%d unspent)",
+	ACTIVE_SPEC = "Act Spec",
 	SECOND_SPEC = "2nd Spec",
 
 	ROLE_TANK = "Tank",
@@ -114,6 +115,7 @@ local de = {
 	DONE = "Fertig. %d geprüft, %d mit Befunden, %d nicht erreichbar.",
 	HELP = "Befehle: /gc, /gc ziel, /gc gruppe, /gc flüstern",
 	UNSPENT = " (%d unvergeben)",
+	ACTIVE_SPEC = "Act Spec",
 	SECOND_SPEC = "2nd Spec",
 
 	ROLE_TANK = "Tank",

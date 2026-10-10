@@ -3,8 +3,15 @@ local _, GearCheck = ...
 local InspectView = {}
 GearCheck.InspectView = InspectView
 
-local PANEL_WIDTH = 320
+local PANEL_WIDTH = 260
 local DOCK = 28
+local TAB_WIDTH = 16
+local TAB_HEIGHT = 54
+local TAB_Y = -58
+local TAB_OVERHANG = 10
+local TAB_LINE = 2
+local VISIBLE_RIGHT = 28
+local VISIBLE_LEFT = 10
 
 local watch = CreateFrame("Frame", nil, UIParent)
 watch:SetWidth(1)
@@ -223,19 +230,50 @@ function InspectView:EnsurePanel()
 	button:Hide()
 	self.button = button
 
-	local toggle = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	toggle:SetWidth(36)
-	toggle:SetHeight(22)
+	local toggle = CreateFrame("Button", nil, InspectFrame)
+	toggle:SetWidth(TAB_WIDTH)
+	toggle:SetHeight(TAB_HEIGHT)
+	toggle:SetFrameStrata("HIGH")
+	toggle:SetHitRectInsets(-6, -6, -4, -4)
+	toggle:SetBackdrop({
+		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+		tile = true,
+		tileSize = 32,
+	})
+	local function tabLine()
+		local line = toggle:CreateTexture(nil, "ARTWORK")
+		line:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
+		line:SetVertexColor(0.78, 0.64, 0.32, 1)
+		return line
+	end
+	toggle.lineTop = tabLine()
+	toggle.lineBottom = tabLine()
+	toggle.lineOuter = tabLine()
+	local label = toggle:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	label:SetPoint("CENTER", toggle, "CENTER", 0, 1)
+	toggle:SetFontString(label)
 	toggle:SetText("<")
+	local highlight = toggle:CreateTexture(nil, "HIGHLIGHT")
+	highlight:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
+	highlight:SetBlendMode("ADD")
+	highlight:SetAlpha(0.2)
+	highlight:SetPoint("TOPLEFT", toggle, "TOPLEFT", 1, -TAB_LINE)
+	highlight:SetPoint("BOTTOMRIGHT", toggle, "BOTTOMRIGHT", -1, TAB_LINE)
 	toggle:SetScript("OnClick", function()
 		InspectView:SetCollapsed(not InspectView:IsCollapsed())
 	end)
 	toggle:SetScript("OnEnter", function(self)
+		self.lineTop:SetVertexColor(1, 0.88, 0.5, 1)
+		self.lineBottom:SetVertexColor(1, 0.88, 0.5, 1)
+		self.lineOuter:SetVertexColor(1, 0.88, 0.5, 1)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		GameTooltip:SetText(InspectView:IsCollapsed() and GearCheck:T("EXPAND") or GearCheck:T("COLLAPSE"))
 		GameTooltip:Show()
 	end)
-	toggle:SetScript("OnLeave", function()
+	toggle:SetScript("OnLeave", function(self)
+		self.lineTop:SetVertexColor(0.78, 0.64, 0.32, 1)
+		self.lineBottom:SetVertexColor(0.78, 0.64, 0.32, 1)
+		self.lineOuter:SetVertexColor(0.78, 0.64, 0.32, 1)
 		GameTooltip:Hide()
 	end)
 	toggle:Hide()
@@ -266,12 +304,11 @@ function InspectView:Place()
 	if side == self.side then return end
 	self.side = side
 	panel:ClearAllPoints()
+	panel:SetHeight(math.floor((parent:GetHeight() or 512) * 0.5))
 	if side == "left" then
 		panel:SetPoint("TOPRIGHT", parent, "TOPLEFT", DOCK, 0)
-		panel:SetPoint("BOTTOMRIGHT", parent, "BOTTOMLEFT", DOCK, 0)
 	else
 		panel:SetPoint("TOPLEFT", parent, "TOPRIGHT", -DOCK, 0)
-		panel:SetPoint("BOTTOMLEFT", parent, "BOTTOMRIGHT", -DOCK, 0)
 	end
 	panel:SetFrameLevel((parent:GetFrameLevel() or 0) + 5)
 	self:ApplyCollapse()
@@ -308,34 +345,58 @@ function InspectView:ApplyCollapse()
 		self.scroll:Hide()
 		self.button:Hide()
 		panel:Hide()
-		if not parent then return end
-		toggle:SetParent(parent)
-		toggle:ClearAllPoints()
-		toggle:SetFrameStrata("HIGH")
-		toggle:SetFrameLevel((parent:GetFrameLevel() or 1) + 20)
-		if self.side == "left" then
-			toggle:SetPoint("TOPRIGHT", parent, "TOPLEFT", 6, -46)
-		else
-			toggle:SetPoint("TOPLEFT", parent, "TOPRIGHT", -6, -46)
+	else
+		panel:SetWidth(PANEL_WIDTH)
+		self.title:Show()
+		self.nameText:Show()
+		self.summary:Show()
+		self.scroll:Show()
+		if parent and parent:IsShown() then
+			panel:Show()
 		end
-		if parent:IsShown() then
-			toggle:Show()
-		end
+	end
+	if not parent then
+		toggle:Hide()
 		return
 	end
-	panel:SetWidth(PANEL_WIDTH)
-	self.title:Show()
-	self.nameText:Show()
-	self.summary:Show()
-	self.scroll:Show()
-	toggle:SetParent(panel)
+	local anchor = parent
+	local level = (parent:GetFrameLevel() or 1) + 20
+	if not collapsed then
+		anchor = panel
+		level = (panel:GetFrameLevel() or 1) + 10
+	end
+	toggle:SetParent(anchor)
 	toggle:ClearAllPoints()
 	toggle:SetFrameStrata("HIGH")
-	toggle:SetFrameLevel((panel:GetFrameLevel() or 1) + 10)
-	toggle:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -8)
-	if parent and parent:IsShown() then
-		panel:Show()
+	toggle:SetFrameLevel(level)
+	local lineTop = toggle.lineTop
+	local lineBottom = toggle.lineBottom
+	local lineOuter = toggle.lineOuter
+	lineTop:ClearAllPoints()
+	lineBottom:ClearAllPoints()
+	lineOuter:ClearAllPoints()
+	lineTop:SetHeight(TAB_LINE)
+	lineBottom:SetHeight(TAB_LINE)
+	lineOuter:SetWidth(TAB_LINE)
+	lineTop:SetPoint("TOPLEFT", toggle, "TOPLEFT", 0, 0)
+	lineTop:SetPoint("TOPRIGHT", toggle, "TOPRIGHT", 0, 0)
+	lineBottom:SetPoint("BOTTOMLEFT", toggle, "BOTTOMLEFT", 0, 0)
+	lineBottom:SetPoint("BOTTOMRIGHT", toggle, "BOTTOMRIGHT", 0, 0)
+	local leftInset = collapsed and VISIBLE_LEFT or 0
+	local rightInset = collapsed and VISIBLE_RIGHT or 0
+	if self.side == "left" then
+		toggle:SetPoint("TOPLEFT", anchor, "TOPLEFT", leftInset - TAB_OVERHANG, TAB_Y)
+		lineOuter:SetPoint("TOPLEFT", toggle, "TOPLEFT", 0, 0)
+		lineOuter:SetPoint("BOTTOMLEFT", toggle, "BOTTOMLEFT", 0, 0)
+	else
+		toggle:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", TAB_OVERHANG - rightInset, TAB_Y)
+		lineOuter:SetPoint("TOPRIGHT", toggle, "TOPRIGHT", 0, 0)
+		lineOuter:SetPoint("BOTTOMRIGHT", toggle, "BOTTOMRIGHT", 0, 0)
+	end
+	if parent:IsShown() then
 		toggle:Show()
+	else
+		toggle:Hide()
 	end
 end
 

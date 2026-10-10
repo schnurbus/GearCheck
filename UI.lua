@@ -280,10 +280,13 @@ function UI:SummaryText(record)
 	if header ~= "" then
 		lines[#lines + 1] = header
 	end
-	lines[#lines + 1] = (record.roleLabel or GearCheck:T("ROLE_UNKNOWN")) .. "  " .. (record.trees or "")
+	local active = (record.roleLabel or GearCheck:T("ROLE_UNKNOWN")) .. "  " .. (record.trees or "")
 	if record.secondary then
 		local second = record.secondary
+		lines[#lines + 1] = GearCheck:T("ACTIVE_SPEC") .. "  " .. active
 		lines[#lines + 1] = GearCheck:T("SECOND_SPEC") .. "  " .. (second.label or GearCheck:T("ROLE_UNKNOWN")) .. "  " .. (second.trees or "")
+	else
+		lines[#lines + 1] = active
 	end
 	if record.note then
 		lines[#lines + 1] = "|cffffff80" .. record.note .. "|r"
