@@ -11,6 +11,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+
+    env:
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }} 
+
     steps:
       - name: Clone project
         uses: actions/checkout@v7
