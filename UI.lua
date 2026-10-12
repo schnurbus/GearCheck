@@ -165,11 +165,15 @@ for index = 1, MAX_ROWS do
 	row.selected:Hide()
 	row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	row.name:SetPoint("LEFT", row, "LEFT", 6, 0)
-	row.name:SetWidth(120)
+	row.name:SetWidth(100)
 	row.name:SetJustifyH("LEFT")
+	row.score = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	row.score:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+	row.score:SetWidth(46)
+	row.score:SetJustifyH("RIGHT")
 	row.info = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	row.info:SetPoint("LEFT", row.name, "RIGHT", 4, 0)
-	row.info:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+	row.info:SetPoint("RIGHT", row.score, "LEFT", -4, 0)
 	row.info:SetJustifyH("RIGHT")
 	row:SetScript("OnClick", function(self)
 		UI.selectedKey = self.key
@@ -279,6 +283,10 @@ function UI:SummaryText(record)
 	end
 	if header ~= "" then
 		lines[#lines + 1] = header
+	end
+	local gearScore = GearCheck.Score and GearCheck.Score.FromGear(record.gear, record.class)
+	if gearScore then
+		lines[#lines + 1] = GearCheck.Score.Text(gearScore)
 	end
 	local active = (record.roleLabel or GearCheck:T("ROLE_UNKNOWN")) .. "  " .. (record.trees or "")
 	if record.secondary then
@@ -466,6 +474,14 @@ function UI:Refresh()
 				row.name:SetTextColor(1, 1, 1)
 			end
 			row.info:SetText(rowInfo(record))
+			local gearScore = record.status == "done" and GearCheck.Score and GearCheck.Score.FromGear(record.gear, record.class)
+			if gearScore then
+				row.score:SetText(tostring(gearScore))
+				local r, g, b = GearCheck.Score.Color(gearScore)
+				row.score:SetTextColor(r, g, b)
+			else
+				row.score:SetText("")
+			end
 			if record.key == self.selectedKey then
 				row.selected:Show()
 			else
@@ -474,6 +490,7 @@ function UI:Refresh()
 			row:Show()
 		else
 			row.key = nil
+			row.score:SetText("")
 			row:Hide()
 			row.selected:Hide()
 		end

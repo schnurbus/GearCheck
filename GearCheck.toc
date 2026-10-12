@@ -11,6 +11,7 @@ Locale.lua
 Data.lua
 Roles.lua
 Classify.lua
+Score.lua
 Scan.lua
 Whisper.lua
 UI.lua

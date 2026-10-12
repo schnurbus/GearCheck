@@ -492,6 +492,7 @@ function Classify.Gear(unit, context)
 			entry.itemName = name
 			entry.quality = quality
 			entry.level = itemLevel
+			entry.equip = equip
 			entry.texture = texture or GetInventoryItemTexture(unit, slotId)
 			local role, fit, decided = classifyLink(link, classToken, playerRole, equip, slot.key)
 			entry.role = role
@@ -513,12 +514,13 @@ function Classify.Complete(record)
 	local playerRole = playerRoleOf(record.role)
 	for index = 1, #gear do
 		local entry = gear[index]
-		if entry.link and not entry.level then
-			local name, _, quality, itemLevel, _, _, _, _, _, texture = GetItemInfo(entry.link)
+		if entry.link and (not entry.level or entry.quality == nil or entry.equip == nil) then
+			local name, _, quality, itemLevel, _, _, _, _, equip, texture = GetItemInfo(entry.link)
 			if itemLevel then
 				entry.itemName = entry.itemName or name
-				entry.quality = entry.quality or quality
-				entry.level = itemLevel
+				if entry.quality == nil then entry.quality = quality end
+				entry.level = entry.level or itemLevel
+				if entry.equip == nil then entry.equip = equip end
 				entry.texture = entry.texture or texture
 			end
 		end
@@ -526,8 +528,9 @@ function Classify.Complete(record)
 			entry.retryAt = now + 1
 			local _, _, quality, itemLevel, _, _, _, _, equip, texture = GetItemInfo(entry.link)
 			if itemLevel then
-				entry.quality = entry.quality or quality
+				if entry.quality == nil then entry.quality = quality end
 				entry.level = entry.level or itemLevel
+				if entry.equip == nil then entry.equip = equip end
 				entry.texture = entry.texture or texture
 			end
 			local role, fit, decided = classifyLink(entry.link, record.class, playerRole, equip, entry.key)
