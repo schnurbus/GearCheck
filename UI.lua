@@ -258,6 +258,30 @@ local function averageLevel(gear)
 	return math.floor(sum / count + 0.5)
 end
 
+local function channelByte(value)
+	if value < 0 then value = 0 end
+	if value > 1 then value = 1 end
+	return math.floor(value * 255 + 0.5)
+end
+
+local function gearScoreText(score)
+	local text = GearCheck:T("GEAR_SCORE", score)
+	if type(GearScore_GetQuality) ~= "function" then
+		return text
+	end
+	local ok, first, second, third = pcall(GearScore_GetQuality, score)
+	if not ok or type(first) ~= "number" or type(second) ~= "number" or type(third) ~= "number" then
+		return text
+	end
+	return string.format(
+		"|cff%02x%02x%02x%s|r",
+		channelByte(first),
+		channelByte(third),
+		channelByte(second),
+		text
+	)
+end
+
 function UI:SummaryText(record)
 	if not record then
 		return GearCheck:T("PROMPT")
@@ -270,12 +294,26 @@ function UI:SummaryText(record)
 	end
 	local lines = {}
 	local header = record.className or record.class or ""
+	local color = record.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[record.class]
+	if header ~= "" and color then
+		header = string.format(
+			"|cff%02x%02x%02x%s|r",
+			math.floor(color.r * 255 + 0.5),
+			math.floor(color.g * 255 + 0.5),
+			math.floor(color.b * 255 + 0.5),
+			header
+		)
+	end
 	if record.level and record.level > 0 then
 		header = header .. "  " .. GearCheck:T("LEVEL", record.level)
 	end
 	local average = averageLevel(record.gear)
 	if average then
 		header = header .. "  " .. GearCheck:T("AVG_ILVL", average)
+	end
+	local gearScore = GearCheck:GearScoreFor(record)
+	if gearScore then
+		header = header .. "  " .. gearScoreText(gearScore)
 	end
 	if header ~= "" then
 		lines[#lines + 1] = header

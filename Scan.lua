@@ -176,6 +176,10 @@ function Scan:ApplyResult(record, unit, spec)
 		class = record.class,
 		level = record.level,
 	})
+	local gearScore = GearCheck:ReadGearScore(unit)
+	if gearScore then
+		record.gearScore = gearScore
+	end
 	if spec.role == "unknown" then
 		record.issues = {}
 		record.note = GearCheck:T("SPEC_UNCLEAR")

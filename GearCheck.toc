@@ -5,7 +5,9 @@
 ## Author: GearCheck
 ## Version: 1.0.0
 ## SavedVariables: GearCheckDB
+## OptionalDeps: GearScore, GearScoreLite
 
+GearCheckInspect.xml
 Core.lua
 Locale.lua
 Data.lua

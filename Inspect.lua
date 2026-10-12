@@ -412,6 +412,342 @@ local function countedLevels(record)
 	return count
 end
 
+local function roleColor(entry, playerRole)
+	if not entry.role then
+		return 0.55, 0.55, 0.55
+	end
+	if entry.fit == false then
+		return 1, 0.45, 0.45
+	end
+	if playerRole and playerRole ~= "unknown" then
+		if entry.role == playerRole then
+			return 0.5, 1, 0.5
+		end
+		if entry.fit then
+			return 1, 0.82, 0.35
+		end
+		return 1, 0.45, 0.45
+	end
+	return 0.9, 0.9, 0.9
+end
+
+local function issuesBySlot(record)
+	local grouped = {}
+	local issues = record and record.issues
+	if not issues then return grouped end
+	for index = 1, #issues do
+		local issue = issues[index]
+		local list = grouped[issue.slot]
+		if not list then
+			list = {}
+			grouped[issue.slot] = list
+		end
+		list[#list + 1] = issue.text
+	end
+	return grouped
+end
+
+local function paintIcon(widget, entry)
+	if entry.texture then
+		widget.icon:SetTexture(entry.texture)
+	elseif entry.link then
+		widget.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+	else
+		widget.icon:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
+	end
+	if entry.link then
+		widget.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		widget.icon:SetVertexColor(1, 1, 1)
+	else
+		widget.icon:SetTexCoord(0, 1, 0, 1)
+		widget.icon:SetVertexColor(0.15, 0.15, 0.15)
+	end
+end
+
+function InspectView:EnsureTab()
+	if self.tab or not InspectFrame then return end
+	local id = (InspectFrame.numTabs or 3) + 1
+	local previous = _G["InspectFrameTab" .. (id - 1)]
+	if not previous or not InspectFrameTab_OnClick then return end
+
+	local tab = CreateFrame("Button", "InspectFrameTab" .. id, InspectFrame, "CharacterFrameTabButtonTemplate")
+	tab:SetID(id)
+	tab:SetText("GearCheck")
+	tab:SetPoint("LEFT", previous, "RIGHT", -15, 0)
+	tab:SetScript("OnClick", function(self)
+		InspectFrameTab_OnClick(self)
+	end)
+	PanelTemplates_SetNumTabs(InspectFrame, id)
+	PanelTemplates_TabResize(tab, 0)
+	local highlight = _G[tab:GetName() .. "HighlightTexture"]
+	if highlight then
+		highlight:SetWidth(tab:GetTextWidth() + 30)
+	end
+	self.tab = tab
+	self.tabId = id
+
+	local page = CreateFrame("Frame", "GearCheckInspectPage", InspectFrame, "GearCheckInspectTemplate")
+	page:Hide()
+	self.page = page
+	self.pageSummary = _G[page:GetName() .. "Summary"]
+	self.pageScroll = _G[page:GetName() .. "Scroll"]
+	self.pageButton = _G[page:GetName() .. "Whisper"]
+	self.portrait = _G[page:GetName() .. "Portrait"]
+	local function fitWhisperButton(button)
+		local width = (button:GetTextWidth() or 0) + 36
+		if width < 48 then
+			width = 48
+		end
+		button:SetWidth(width)
+	end
+	self.fitWhisperButton = fitWhisperButton
+	self.pageButton:SetText(GearCheck:T("BUTTON_WHISPER"))
+	fitWhisperButton(self.pageButton)
+	self.pageButton:SetScript("OnClick", function()
+		if InspectView.record then
+			GearCheck.Whisper:ConfirmOne(InspectView.record)
+		end
+	end)
+
+	local scroll = self.pageScroll
+	local content = CreateFrame("Frame", nil, scroll)
+	content:SetWidth(240)
+	content:SetHeight(1)
+	scroll:SetScrollChild(content)
+	self.pageContent = content
+
+	local rows = {}
+	local count = #GearCheck.Data.slots
+	for index = 1, count do
+		local widget = CreateFrame("Button", nil, content)
+		widget:SetHeight(36)
+		widget:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+		local rowHighlight = widget:GetHighlightTexture()
+		if rowHighlight then
+			rowHighlight:SetBlendMode("ADD")
+		end
+		widget.slot = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		widget.slot:SetPoint("TOPLEFT", widget, "TOPLEFT", 0, -6)
+		widget.slot:SetWidth(84)
+		widget.slot:SetJustifyH("RIGHT")
+		widget.icon = widget:CreateTexture(nil, "ARTWORK")
+		widget.icon:SetWidth(22)
+		widget.icon:SetHeight(22)
+		widget.icon:SetPoint("TOPLEFT", widget, "TOPLEFT", 88, -2)
+		widget.shade = widget:CreateTexture(nil, "BACKGROUND")
+		widget.shade:SetPoint("TOPLEFT", widget.icon, "TOPLEFT", -1, 1)
+		widget.shade:SetPoint("BOTTOMRIGHT", widget.icon, "BOTTOMRIGHT", 1, -1)
+		widget.shade:SetTexture(0, 0, 0, 0.8)
+		widget.name = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		widget.name:SetPoint("TOPLEFT", widget, "TOPLEFT", 114, -1)
+		widget.name:SetHeight(14)
+		widget.name:SetJustifyH("LEFT")
+		widget.name:SetJustifyV("MIDDLE")
+		widget.level = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		widget.level:SetPoint("TOPLEFT", widget, "TOPLEFT", 114, -16)
+		widget.level:SetWidth(32)
+		widget.level:SetJustifyH("LEFT")
+		widget.role = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		widget.role:SetPoint("TOPLEFT", widget.level, "TOPRIGHT", 4, 0)
+		widget.role:SetJustifyH("LEFT")
+		widget.issues = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		widget.issues:SetPoint("TOPLEFT", widget, "TOPLEFT", 114, -32)
+		widget.issues:SetJustifyH("LEFT")
+		widget.issues:SetJustifyV("TOP")
+		widget.issues:SetTextColor(1, 0.5, 0.5)
+		widget.rule = widget:CreateTexture(nil, "BACKGROUND")
+		widget.rule:SetHeight(1)
+		widget.rule:SetPoint("BOTTOMLEFT", widget, "BOTTOMLEFT", 0, 0)
+		widget.rule:SetPoint("BOTTOMRIGHT", widget, "BOTTOMRIGHT", 0, 0)
+		widget.rule:SetTexture(1, 1, 1, 0.1)
+		widget:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			if self.link then
+				local shown = pcall(GameTooltip.SetHyperlink, GameTooltip, self.link)
+				if not shown then
+					GameTooltip:ClearLines()
+					GameTooltip:SetText(self.itemName or self.slotName or "")
+				end
+				if self.roleLabel then
+					GameTooltip:AddLine(self.roleLabel, self.roleR or 1, self.roleG or 1, self.roleB or 1)
+				end
+			else
+				GameTooltip:ClearLines()
+				GameTooltip:SetText(self.slotName or "")
+				GameTooltip:AddLine(GearCheck:T("EMPTY"), 0.7, 0.7, 0.7)
+			end
+			GameTooltip:Show()
+		end)
+		widget:SetScript("OnLeave", function()
+			GameTooltip:Hide()
+		end)
+		widget:SetScript("OnClick", function(self)
+			if self.link and IsModifiedClick("CHATLINK") then
+				ChatEdit_InsertLink(self.link)
+			end
+		end)
+		widget:Hide()
+		rows[index] = widget
+	end
+	self.gearRows = rows
+
+	local leftover = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	leftover:SetJustifyH("LEFT")
+	leftover:SetJustifyV("TOP")
+	leftover:SetText("")
+	self.pageLeftover = leftover
+
+	local accum = 0
+	page:SetScript("OnUpdate", function(_, elapsed)
+		accum = accum + elapsed
+		if accum < 0.2 then return end
+		accum = 0
+		InspectView:PolishPage()
+	end)
+end
+
+local INSPECT_SLOTS = {
+	"InspectHeadSlot",
+	"InspectNeckSlot",
+	"InspectShoulderSlot",
+	"InspectBackSlot",
+	"InspectChestSlot",
+	"InspectShirtSlot",
+	"InspectTabardSlot",
+	"InspectWristSlot",
+	"InspectHandsSlot",
+	"InspectWaistSlot",
+	"InspectLegsSlot",
+	"InspectFeetSlot",
+	"InspectFinger0Slot",
+	"InspectFinger1Slot",
+	"InspectTrinket0Slot",
+	"InspectTrinket1Slot",
+	"InspectMainHandSlot",
+	"InspectSecondaryHandSlot",
+	"InspectRangedSlot",
+}
+
+local function restorePaperDoll()
+	local paper = InspectPaperDollFrame
+	if not paper or not paper:IsShown() then return end
+	if InspectModelFrame then
+		InspectModelFrame:SetAlpha(1)
+		InspectModelFrame:Show()
+	end
+	for index = 1, #INSPECT_SLOTS do
+		local name = INSPECT_SLOTS[index]
+		local button = _G[name]
+		if button then
+			button:SetAlpha(1)
+			button:Show()
+			button:EnableMouse(true)
+			local icon = _G[name .. "IconTexture"]
+			if icon then
+				icon:SetAlpha(1)
+			end
+			if button.GetNormalTexture then
+				local normal = button:GetNormalTexture()
+				if normal then
+					normal:SetAlpha(1)
+				end
+			end
+		end
+	end
+	if InspectPaperDollFrame_OnShow then
+		InspectPaperDollFrame_OnShow()
+	end
+end
+
+local dollRefresh = CreateFrame("Frame")
+dollRefresh:Hide()
+dollRefresh:SetScript("OnUpdate", function(self)
+	self:Hide()
+	restorePaperDoll()
+end)
+
+function InspectView:OnTab(newID)
+	if not self.page then return end
+	if newID ~= self.tabId then
+		self.page:Hide()
+		self.page:SetFrameLevel(1)
+		if newID == 1 then
+			restorePaperDoll()
+			dollRefresh:Show()
+		end
+		return
+	end
+	local level = (InspectFrame:GetFrameLevel() or 1) + 1
+	self.page:SetFrameLevel(level)
+	if InspectNameFrame then
+		InspectNameFrame:SetFrameLevel(level + 3)
+	end
+	if InspectFrameCloseButton then
+		InspectFrameCloseButton:SetFrameLevel(level + 4)
+	end
+	local tabs = InspectFrame.numTabs or 4
+	for index = 1, tabs do
+		local tab = _G["InspectFrameTab" .. index]
+		if tab then
+			tab:SetFrameLevel(level + 5)
+		end
+	end
+	self.page:Show()
+	self:RenderPage()
+end
+
+local function paintGearRow(widget, entry, issueText, playerRole)
+	widget.link = entry.link
+	widget.slotName = entry.name
+	widget.itemName = entry.itemName
+	widget.slot:SetText(entry.name or "")
+	if issueText ~= "" then
+		widget.slot:SetTextColor(1, 0.45, 0.45)
+	else
+		widget.slot:SetTextColor(0.9, 0.8, 0.45)
+	end
+	paintIcon(widget, entry)
+	if entry.itemName then
+		widget.name:SetText(entry.itemName)
+		local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[entry.quality or 1]
+		if color then
+			widget.name:SetTextColor(color.r, color.g, color.b)
+		else
+			widget.name:SetTextColor(1, 1, 1)
+		end
+	elseif entry.link then
+		widget.name:SetText("...")
+		widget.name:SetTextColor(1, 1, 1)
+	else
+		widget.name:SetText(GearCheck:T("EMPTY"))
+		widget.name:SetTextColor(0.55, 0.55, 0.55)
+	end
+	if entry.level then
+		widget.level:SetText(entry.level)
+		local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[entry.quality or 1]
+		if color then
+			widget.level:SetTextColor(color.r, color.g, color.b)
+		else
+			widget.level:SetTextColor(1, 1, 1)
+		end
+	else
+		widget.level:SetText("")
+	end
+	if entry.role then
+		local label = GearCheck.Data.RoleLabel(entry.role)
+		local r, g, b = roleColor(entry, playerRole)
+		widget.role:SetText(label)
+		widget.role:SetTextColor(r, g, b)
+		widget.roleLabel = label
+		widget.roleR, widget.roleG, widget.roleB = r, g, b
+	else
+		widget.role:SetText(entry.empty and "" or "—")
+		widget.role:SetTextColor(0.55, 0.55, 0.55)
+		widget.roleLabel = nil
+	end
+	widget.issues:SetText(issueText)
+end
+
 function InspectView:Polish()
 	local record = self.record
 	if not record or record.status ~= "done" or not GearCheck.Classify.Complete then return end
@@ -422,7 +758,139 @@ function InspectView:Polish()
 	end
 end
 
+function InspectView:PolishPage()
+	if not self.page or not self.page:IsShown() then return end
+	local record = self.record
+	if not record or record.status ~= "done" or not GearCheck.Classify.Complete then return end
+	local before = countedLevels(record)
+	GearCheck.Classify.Complete(record)
+	if countedLevels(record) ~= before then
+		self:RenderPage()
+	end
+end
+
+function InspectView:RenderPage()
+	local page = self.page
+	if not page or not page:IsShown() then return end
+	local record = self.record
+	if record and record.status == "done" and GearCheck.Classify.Complete then
+		GearCheck.Classify.Complete(record)
+	end
+
+	local unit = InspectFrame and InspectFrame.unit
+	if unit and UnitExists(unit) and self.portrait then
+		SetPortraitTexture(self.portrait, unit)
+	end
+
+	local textWidth = math.max((page:GetWidth() or 384) - 120, 150)
+	local summary = self.pageSummary
+	summary:SetWidth(textWidth)
+	summary:SetText(headerText(record))
+
+	local showButton = self:CanWhisper(record)
+	local button = self.pageButton
+	if showButton then
+		button:Show()
+		if GearCheck.Whisper and GearCheck.Whisper:IsBusy() then
+			button:Disable()
+			button:SetText(GearCheck:T("WHISPERING"))
+		else
+			button:Enable()
+			button:SetText(GearCheck:T("BUTTON_WHISPER"))
+		end
+		if self.fitWhisperButton then
+			self.fitWhisperButton(button)
+		end
+	else
+		button:Hide()
+	end
+
+	local scroll = self.pageScroll
+	local offset = scroll:GetVerticalScroll() or 0
+	if self.pageGuid ~= self.guid then
+		self.pageGuid = self.guid
+		offset = 0
+	end
+	scroll:ClearAllPoints()
+	scroll:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -8)
+	if showButton then
+		scroll:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", -70, 116)
+	else
+		scroll:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", -70, 88)
+	end
+
+	local rowWidth = math.max((scroll:GetWidth() or textWidth) - 4, 140)
+	local nameWidth = math.max(rowWidth - 116, 40)
+	local gear = record and record.status == "done" and record.gear
+	local grouped = issuesBySlot(record)
+	local used = {}
+	local playerRole = record and record.role
+	local y = 0
+	for index = 1, #self.gearRows do
+		local widget = self.gearRows[index]
+		local entry = gear and gear[index]
+		if not entry then
+			widget:Hide()
+		else
+			local slotIssues = grouped[entry.name]
+			local issueText = slotIssues and table.concat(slotIssues, "\n") or ""
+			used[entry.name] = true
+			widget.name:SetWidth(nameWidth)
+			widget.role:SetWidth(math.max(nameWidth - 36, 40))
+			widget.issues:SetWidth(nameWidth)
+			paintGearRow(widget, entry, issueText, playerRole)
+			local issueHeight = 0
+			if issueText ~= "" then
+				issueHeight = widget.issues:GetStringHeight() or 0
+				if issueHeight < 1 then
+					issueHeight = #slotIssues * 12
+				end
+			end
+			local height = issueHeight > 0 and (34 + issueHeight) or 36
+			widget:SetWidth(rowWidth)
+			widget:SetHeight(height)
+			widget:ClearAllPoints()
+			widget:SetPoint("TOPLEFT", self.pageContent, "TOPLEFT", 0, -y)
+			y = y + height + 2
+			widget:Show()
+		end
+	end
+
+	local extra = {}
+	for name, list in pairs(grouped) do
+		if not used[name] then
+			for index = 1, #list do
+				extra[#extra + 1] = "|cffff8080" .. name .. ":|r " .. list[index]
+			end
+		end
+	end
+	local leftover = self.pageLeftover
+	leftover:ClearAllPoints()
+	leftover:SetWidth(rowWidth)
+	if #extra > 0 then
+		leftover:SetPoint("TOPLEFT", self.pageContent, "TOPLEFT", 0, -y)
+		leftover:SetText(table.concat(extra, "\n"))
+		local extraHeight = leftover:GetStringHeight() or 0
+		if extraHeight < 1 then
+			extraHeight = #extra * 12
+		end
+		y = y + extraHeight + 4
+	else
+		leftover:SetText("")
+	end
+
+	self.pageContent:SetWidth(rowWidth)
+	self.pageContent:SetHeight(math.max(y, 1))
+	scroll:UpdateScrollChildRect()
+	local range = scroll:GetVerticalScrollRange() or 0
+	if offset > range then
+		offset = range
+	end
+	scroll:SetVerticalScroll(offset)
+end
+
 function InspectView:Render()
+	self:RenderPage()
 	local panel = self.panel
 	if not panel then return end
 	if self:IsCollapsed() then
@@ -504,8 +972,13 @@ function InspectView:Render()
 end
 
 function InspectView:Refresh()
-	if not self.panel or not self.panel:IsShown() then return end
-	self:Render()
+	local pageShown = self.page and self.page:IsShown()
+	local panelShown = self.panel and self.panel:IsShown()
+	if panelShown then
+		self:Render()
+	elseif pageShown then
+		self:RenderPage()
+	end
 end
 
 function InspectView:Shutdown()
@@ -529,10 +1002,14 @@ function InspectView:Shutdown()
 	self.record = nil
 	self.following = false
 	self.renderedGuid = nil
+	self.pageGuid = nil
 	self.side = nil
 	self:StopWatch()
 	if self.panel then
 		self.panel:Hide()
+	end
+	if self.page then
+		self.page:Hide()
 	end
 	if self.toggle then
 		self.toggle:Hide()
@@ -552,6 +1029,7 @@ function InspectView:Open()
 
 	local guid = UnitGUID(unit)
 	self:EnsurePanel()
+	self:EnsureTab()
 	GearCheck.Scan:HoldInspect(guid)
 	self.guid = guid
 	self.panel:Show()
@@ -580,6 +1058,32 @@ function InspectView:Install()
 	if self.installed then return end
 	self.installed = true
 	self:EnsurePanel()
+	self:EnsureTab()
+
+	if not self.switchHooked and InspectSwitchTabs then
+		self.switchHooked = true
+		local originalSwitch = InspectSwitchTabs
+		InspectSwitchTabs = function(newID)
+			if newID == InspectView.tabId then
+				if INSPECTFRAME_SUBFRAMES then
+					for index = 1, #INSPECTFRAME_SUBFRAMES do
+						local sub = _G[INSPECTFRAME_SUBFRAMES[index]]
+						if sub then
+							sub:Hide()
+						end
+					end
+				end
+				PanelTemplates_SetTab(InspectFrame, newID)
+				InspectView:OnTab(newID)
+				return
+			end
+			if PanelTemplates_GetSelectedTab(InspectFrame) == InspectView.tabId then
+				PanelTemplates_SetTab(InspectFrame, 1)
+			end
+			originalSwitch(newID)
+			InspectView:OnTab(newID)
+		end
+	end
 
 	local originalShow = InspectFrame_Show
 	InspectFrame_Show = function(unit)
