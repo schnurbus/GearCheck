@@ -125,7 +125,7 @@ Data.enchants = {
 	[3595] = { pvp = true }, -- Rune des Zauberzerbrechens
 	[3883] = { tank = true }, -- Rune des nerubischen Panzers
 	[3847] = { tank = true }, -- Rune des Steinhautgargoyles
-	[2673] = { tank = true, damage = true }, -- Mungo
+	[2673] = { tank = true, damage = true, exclude = { DEATHKNIGHT = { tank = true } } }, -- Mungo
 	[3225] = { damage = true }, -- Henker
 	[3789] = { damage = true }, -- Berserker
 	[3790] = { damage = true, caster = true }, -- Schwarzmagie
@@ -144,6 +144,12 @@ Data.enchants = {
 	[3869] = { tank = true }, -- Klingenwall
 	[3870] = { tank = true }, -- Blutsauger
 	[3232] = { any = true }, -- Vitalität der Tuskarr
+}
+
+-- Gegenstände, die trotz Schadenswerten für die genannten Rollen erlaubt sind.
+Data.items = {
+	[50012] = { tank = true, damage = true }, -- Chaosruf (25)
+	[50737] = { tank = true, damage = true }, -- Chaosruf (25 heroisch)
 }
 
 Data.relics = {

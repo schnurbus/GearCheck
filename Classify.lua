@@ -239,13 +239,14 @@ local function scoreRole(stats, classToken, role, forEnchant)
 	local dkTank = classToken == "DEATHKNIGHT" and role == "tank"
 	local physical = role == "damage" or role == "tank"
 	local spellUser = role == "caster" or role == "healer"
-	-- Nur Verzauberungen: Tanks dürfen Beweglichkeit, Paladin-Heiler Trefferwertung (Richturteil).
-	local tankEnchant = forEnchant and role == "tank"
-	local paladinHealEnchant = forEnchant and role == "healer" and classToken == "PALADIN"
+	-- Nur Verzauberungen: Beweglichkeit gibt Krit (bei Tanks auch Ausweichen), auch auf Platte.
+	-- Paladin-Heiler dürfen Trefferwertung (Richturteil), auf Ausrüstung und Verzauberungen.
+	local agiEnchant = forEnchant and (role == "tank" or role == "damage")
+	local paladinHeal = role == "healer" and classToken == "PALADIN"
 
 	add(value("stamina"), true)
 	add(value("strength"), usesStrength(classToken, role), "damage")
-	add(value("agility"), usesAgility(classToken, role) or tankEnchant, "damage")
+	add(value("agility"), usesAgility(classToken, role) or agiEnchant, "damage")
 	add(value("intellect"), spellUser, "caster")
 	add(value("spirit"), spellUser, "healer")
 	add(value("spellPower"), spellUser, "caster")
@@ -258,9 +259,9 @@ local function scoreRole(stats, classToken, role, forEnchant)
 	add(value("rangedAP"), role == "damage" and usesAgility(classToken, role), "damage")
 	add(value("armorPen"), role == "damage" or dkTank, "damage")
 	add(value("expertise"), physical, "damage")
-	add(value("hit"), role ~= "healer" or paladinHealEnchant, "caster")
-	add(value("spellHit"), role == "caster" or paladinHealEnchant, "caster")
-	add(value("meleeHit"), physical or paladinHealEnchant, "damage")
+	add(value("hit"), role ~= "healer" or paladinHeal, "caster")
+	add(value("spellHit"), role == "caster" or paladinHeal, "caster")
+	add(value("meleeHit"), physical or paladinHeal, "damage")
 	add(value("rangedHit"), role == "damage", "damage")
 	add(value("crit"), role ~= "tank" or dkTank, "damage")
 	add(value("spellCrit"), spellUser, "caster")
@@ -291,11 +292,17 @@ local function isPvp(stats)
 	return stats ~= nil and (stats.resilience or 0) > 0
 end
 
-local function mismatch(stats, classToken, role, forEnchant)
+local function itemPermitted(itemId, role)
+	local allowed = itemId and Data.items[itemId]
+	return allowed and (allowed.any or allowed[role]) or false
+end
+
+local function mismatch(stats, classToken, role, forEnchant, itemId)
+	if itemPermitted(itemId, role) then return nil end
 	if not stats or not hasStats(stats) then return nil end
 	if isPvp(stats) then return "pvp" end
-	local paladinHealEnchant = forEnchant and role == "healer" and classToken == "PALADIN"
-	if role == "healer" and not paladinHealEnchant and healerIsCaster(stats) then
+	local paladinHeal = role == "healer" and classToken == "PALADIN"
+	if role == "healer" and not paladinHeal and healerIsCaster(stats) then
 		return "caster"
 	end
 	local good, bad, badRole = scoreRole(stats, classToken, role, forEnchant)
@@ -384,7 +391,7 @@ local function relicMismatch(link, role)
 	return Data.FirstRole(matched)
 end
 
-local function dominantRole(stats, classToken, playerRole)
+local function dominantRole(stats, classToken, playerRole, itemId)
 	if not stats or not hasStats(stats) then return nil, nil end
 	if isPvp(stats) then
 		local fit
@@ -419,14 +426,14 @@ local function dominantRole(stats, classToken, playerRole)
 
 	if same then
 		if not playerRole then return nil, nil end
-		local reason = mismatch(stats, classToken, playerRole)
+		local reason = mismatch(stats, classToken, playerRole, nil, itemId)
 		if reason then return reason, false end
 		return playerRole, true
 	end
 
 	if not bestMargin or bestMargin <= 0 then
 		if playerRole then
-			local reason = mismatch(stats, classToken, playerRole)
+			local reason = mismatch(stats, classToken, playerRole, nil, itemId)
 			if reason then return reason, false end
 		end
 		return nil, nil
@@ -434,7 +441,7 @@ local function dominantRole(stats, classToken, playerRole)
 
 	local fit
 	if playerRole then
-		fit = not mismatch(stats, classToken, playerRole)
+		fit = not mismatch(stats, classToken, playerRole, nil, itemId)
 	end
 	return best, fit
 end
@@ -459,7 +466,8 @@ local function classifyLink(link, classToken, playerRole, equip, slotKey)
 	end
 	local stats = itemStats(link)
 	if hasStats(stats) then
-		local role, fit = dominantRole(stats, classToken, playerRole)
+		local itemId = tonumber(string.match(link, "item:(%d+)"))
+		local role, fit = dominantRole(stats, classToken, playerRole, itemId)
 		return role, fit, true
 	end
 	if #Classify.Lines(link) > 0 then
@@ -573,6 +581,11 @@ end
 local function enchantMismatch(enchantId, classToken, role)
 	local override = Data.enchants[enchantId]
 	if override then
+		local excluded = override.exclude and override.exclude[classToken]
+		if excluded and (excluded == true or excluded[role]) then
+			if override.damage and role ~= "damage" then return "damage" end
+			return Data.FirstRole(override)
+		end
 		if override.any or override[role] then return nil end
 		return Data.FirstRole(override)
 	end
@@ -628,7 +641,7 @@ function Classify.Unit(unit, context)
 					addIssue(issues, slot.name, GearCheck:T("RELIC_MISMATCH", Data.RoleLabel(reason)))
 				end
 			else
-				local reason = mismatch(itemStats(link), context.class, context.role)
+				local reason = mismatch(itemStats(link), context.class, context.role, nil, parsed.id)
 				if reason then
 					addIssue(issues, slot.name, mismatchText("item", reason))
 				end
