@@ -91,6 +91,24 @@ local function readGroup(classToken, inspect, group)
 	return result
 end
 
+function Roles.TalentSpent(inspect, spellId)
+	local name = spellId and GetSpellInfo(spellId)
+	if not name then return nil end
+	inspect = inspect and true or false
+	local group = GetActiveTalentGroup(inspect) or 1
+	local tabs = GetNumTalentTabs(inspect) or 0
+	for tab = 1, tabs do
+		local talents = GetNumTalents(tab, inspect) or 0
+		for index = 1, talents do
+			local talentName, _, _, _, spent = GetTalentInfo(tab, index, inspect, false, group)
+			if talentName == name then
+				return spent or 0
+			end
+		end
+	end
+	return 0
+end
+
 function Roles.Read(classToken, inspect)
 	local empty = {
 		role = "unknown",

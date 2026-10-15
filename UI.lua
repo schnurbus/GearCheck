@@ -326,6 +326,17 @@ function UI:SummaryText(record)
 	else
 		lines[#lines + 1] = active
 	end
+	if record.defense and record.defense.summary then
+		local defense = record.defense.summary
+		if record.defense.immune == true then
+			defense = "|cff80ff80" .. defense .. "|r"
+		elseif record.defense.immune == false then
+			defense = "|cffff8080" .. defense .. "|r"
+		else
+			defense = "|cffffff80" .. defense .. "|r"
+		end
+		lines[#lines + 1] = defense
+	end
 	if record.note then
 		lines[#lines + 1] = "|cffffff80" .. record.note .. "|r"
 	end

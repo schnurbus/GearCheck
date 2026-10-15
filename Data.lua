@@ -144,6 +144,20 @@ Data.enchants = {
 	[3869] = { tank = true }, -- Klingenwall
 	[3870] = { tank = true }, -- Blutsauger
 	[3232] = { any = true }, -- Vitalität der Tuskarr
+	[3852] = { tank = true, resilience = 15 }, -- Große Inschrift des Gladiators
+}
+
+-- Stufe 80 gegen Bosse der Stufe 83 (5,6 % Crit). Verteidigungswertung und Abhärtung rechnen zusammen.
+Data.critCap = {
+	bossCrit = 5.6,
+	baseDefense = 400,
+	defenseRatingPerSkill = 4.918498039245605,
+	resilienceRatingPerPercent = 94.27164459228516,
+}
+
+-- Crit-Reduktion aus Talenten, in Prozent pro Rang.
+Data.critTalents = {
+	DRUID = { id = 33853, perRank = 2, max = 3 }, -- Überleben des Stärkeren
 }
 
 -- Gegenstände, die trotz Schadenswerten für die genannten Rollen erlaubt sind.

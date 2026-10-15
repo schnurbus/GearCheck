@@ -65,6 +65,11 @@ local en = {
 	ENCHANT_MISSING = "Enchant missing",
 	SHIELD_MISSING = "Shield missing",
 	RANGED_MISSING = "Ranged weapon missing",
+	DEFENSE = "Defense",
+	DEFENSE_LINE = "Defense %d",
+	DEFENSE_RESILIENCE = ", resilience %d",
+	DEFENSE_TALENT = ", Survival of the Fittest %d/%d",
+	CRIT_CAP = "Not crit immune (%s)",
 	GEM_NOTE = "No gems were found in the item links. Empty sockets may be real, or the server has not sent the gem data yet.",
 
 	PLAYERS = "Players",
@@ -161,6 +166,11 @@ local de = {
 	ENCHANT_MISSING = "Verzauberung fehlt",
 	SHIELD_MISSING = "Schild fehlt",
 	RANGED_MISSING = "Fernkampfwaffe fehlt",
+	DEFENSE = "Verteidigung",
+	DEFENSE_LINE = "Verteidigung %d",
+	DEFENSE_RESILIENCE = ", Abhärtung %d",
+	DEFENSE_TALENT = ", Überleben des Stärkeren %d/%d",
+	CRIT_CAP = "Nicht crit-immun (%s)",
 	GEM_NOTE = "Keine Edelsteine im Item-Link erkannt. Leere Sockel können stimmen, oder der Server hat die Daten nicht geschickt.",
 
 	PLAYERS = "Spieler",

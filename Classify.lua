@@ -9,6 +9,7 @@ local scanTip
 local needles
 local enchantStats
 local relicCache
+local classificationStats
 
 local function tooltipFrame()
 	if not scanTip then
@@ -464,7 +465,7 @@ local function classifyLink(link, classToken, playerRole, equip, slotKey)
 			return Data.FirstRole(matched), fit, true
 		end
 	end
-	local stats = itemStats(link)
+	local stats = classificationStats(link, classToken, playerRole)
 	if hasStats(stats) then
 		local itemId = tonumber(string.match(link, "item:(%d+)"))
 		local role, fit = dominantRole(stats, classToken, playerRole, itemId)
@@ -578,6 +579,207 @@ local function enchantTooltipStats(enchantId)
 	return stats
 end
 
+local function linkWithoutEnchant(link)
+	local stripped, count = string.gsub(link, "(|Hitem:%d+):%d*", "%1:0", 1)
+	if count == 0 then
+		stripped = string.gsub(link, "(item:%d+):%d*", "%1:0", 1)
+	end
+	return stripped
+end
+
+local function isSocketBonus(text)
+	local pattern = ITEM_SOCKET_BONUS
+	if not pattern or not text then return false end
+	local prefix = string.match(pattern, "^(.-)%%s")
+	if not prefix or prefix == "" then return false end
+	return string.sub(text, 1, #prefix) == prefix
+end
+
+local function addSocketBonus(link, into)
+	local lines = Classify.Lines(link)
+	for index = 1, #lines do
+		local line = lines[index]
+		if line.g > 0.85 and line.r < 0.25 and line.b < 0.25 and isSocketBonus(line.text) then
+			harvest(line.text, into)
+		end
+	end
+end
+
+-- Dauerhafte Werte: Grundwerte, Edelsteine, Sockelbonus. Procs und Benutzen-Effekte zählen nicht.
+local function passiveStats(link)
+	local stats = readApiStats(link)
+	if not hasStats(stats) then
+		local lines = Classify.Lines(link)
+		for index = 1, #lines do
+			local line = lines[index]
+			if line.g > 0.85 and line.r < 0.25 and line.b < 0.25 and not isTriggeredLine(line.text) and not isSocketBonus(line.text) then
+				harvest(line.text, stats)
+			end
+		end
+	end
+	addSocketBonus(link, stats)
+	return stats
+end
+
+local function enchantAllowed(enchantId, classToken, role)
+	local override = enchantId and Data.enchants[enchantId]
+	if not override then return false end
+	local excluded = override.exclude and classToken and override.exclude[classToken]
+	if excluded and (excluded == true or (role and excluded[role])) then
+		return false
+	end
+	return override.any or (role and override[role]) or false
+end
+
+local function enchantRatings(enchantId)
+	local defense, resilience = 0, 0
+	local tipped = enchantTooltipStats(enchantId)
+	if tipped then
+		defense = tipped.defense or 0
+		resilience = tipped.resilience or 0
+	end
+	local override = Data.enchants[enchantId]
+	if override then
+		if (override.defense or 0) > defense then
+			defense = override.defense
+		end
+		if (override.resilience or 0) > resilience then
+			resilience = override.resilience
+		end
+	end
+	return defense, resilience
+end
+
+-- Differenz aus vollem Link und Link ohne Verzauberung. Fehlt sie, kommt der Wert aus dem Tooltip.
+local function splitEnchantRatings(link, parsed)
+	if not parsed or parsed.enchant == 0 then
+		return 0, 0, false
+	end
+	local full = readApiStats(link)
+	local bare = readApiStats(linkWithoutEnchant(link))
+	local defense = (full.defense or 0) - (bare.defense or 0)
+	local resilience = (full.resilience or 0) - (bare.resilience or 0)
+	if defense < 0 then defense = 0 end
+	if resilience < 0 then resilience = 0 end
+	if defense > 0 or resilience > 0 then
+		return defense, resilience, true
+	end
+	defense, resilience = enchantRatings(parsed.enchant)
+	return defense, resilience, false
+end
+
+local function copyStats(stats)
+	local copy = {}
+	for key, value in pairs(stats) do
+		copy[key] = value
+	end
+	return copy
+end
+
+classificationStats = function(link, classToken, role)
+	local stats = itemStats(link)
+	local parsed = Classify.ParseLink(link)
+	if not stats or not parsed or not stats.resilience or stats.resilience <= 0 then
+		return stats
+	end
+	if not enchantAllowed(parsed.enchant, classToken, role) then
+		return stats
+	end
+	local _, enchantResilience = splitEnchantRatings(link, parsed)
+	if not enchantResilience or enchantResilience <= 0 then
+		return stats
+	end
+	local bare = readApiStats(linkWithoutEnchant(link))
+	local kept = math.max(bare.resilience or 0, stats.resilience - enchantResilience)
+	local copy = copyStats(stats)
+	if kept > 0 then
+		copy.resilience = kept
+	else
+		copy.resilience = nil
+	end
+	return copy
+end
+
+local function defenseSummary(skill, resilience, talentRank, talentMax)
+	local text = GearCheck:T("DEFENSE_LINE", skill)
+	if resilience > 0 then
+		text = text .. GearCheck:T("DEFENSE_RESILIENCE", resilience)
+	end
+	if talentMax then
+		text = text .. GearCheck:T("DEFENSE_TALENT", talentRank or 0, talentMax)
+	end
+	return text
+end
+
+local function tankDefense(unit, context, gemsIncomplete)
+	local cap = Data.critCap
+	local defenseRating, resilienceRating = 0, 0
+	for index = 1, #Data.slots do
+		local slotId = Data.SlotId(Data.slots[index].key)
+		local link = GetInventoryItemLink(unit, slotId)
+		local parsed = Classify.ParseLink(link)
+		if link and parsed then
+			local bare = passiveStats(linkWithoutEnchant(link))
+			defenseRating = defenseRating + (bare.defense or 0)
+			resilienceRating = resilienceRating + (bare.resilience or 0)
+			local enchantDefense, enchantResilience = splitEnchantRatings(link, parsed)
+			defenseRating = defenseRating + enchantDefense
+			resilienceRating = resilienceRating + enchantResilience
+		end
+	end
+
+	local talentPercent = 0
+	local talentRank, talentMax
+	local talentKnown = true
+	local reduction = Data.critTalents[context.class]
+	if reduction then
+		local inspect = not UnitIsUnit(unit, "player")
+		local spent = GearCheck.Roles.TalentSpent(inspect, reduction.id)
+		if spent == nil then
+			talentKnown = false
+		else
+			if spent > reduction.max then
+				spent = reduction.max
+			end
+			talentRank = spent
+			talentMax = reduction.max
+			talentPercent = spent * reduction.perRank
+		end
+	end
+
+	local skill = math.floor(cap.baseDefense + defenseRating / cap.defenseRatingPerSkill)
+	local resilience = math.floor(resilienceRating + 0.5)
+	local fromDefense = (defenseRating / cap.defenseRatingPerSkill) * 0.04
+	local fromResilience = resilienceRating / cap.resilienceRatingPerPercent
+	local total = fromDefense + fromResilience + talentPercent
+	local covered = total >= cap.bossCrit - 1e-6
+	local immune
+	if covered then
+		immune = true
+	elseif not talentKnown or gemsIncomplete then
+		immune = nil
+	else
+		immune = false
+	end
+
+	local detail = tostring(skill)
+	if resilience > 0 then
+		detail = detail .. GearCheck:T("DEFENSE_RESILIENCE", resilience)
+	end
+	if talentMax then
+		detail = detail .. GearCheck:T("DEFENSE_TALENT", talentRank or 0, talentMax)
+	end
+	return {
+		skill = skill,
+		resilience = resilience,
+		immune = immune,
+		talentRank = talentRank,
+		talentMax = talentMax,
+		summary = defenseSummary(skill, resilience, talentRank, talentMax),
+		issue = GearCheck:T("CRIT_CAP", detail),
+	}
+end
+
 local function enchantMismatch(enchantId, classToken, role)
 	local override = Data.enchants[enchantId]
 	if override then
@@ -620,7 +822,7 @@ end
 function Classify.Unit(unit, context)
 	local issues = {}
 	if not unit or not context or context.role == "unknown" then
-		return issues, nil
+		return issues, nil, nil
 	end
 
 	local strict = (context.level or 0) >= 80
@@ -641,7 +843,7 @@ function Classify.Unit(unit, context)
 					addIssue(issues, slot.name, GearCheck:T("RELIC_MISMATCH", Data.RoleLabel(reason)))
 				end
 			else
-				local reason = mismatch(itemStats(link), context.class, context.role, nil, parsed.id)
+				local reason = mismatch(classificationStats(link, context.class, context.role), context.class, context.role, nil, parsed.id)
 				if reason then
 					addIssue(issues, slot.name, mismatchText("item", reason))
 				end
@@ -734,8 +936,17 @@ function Classify.Unit(unit, context)
 	end
 
 	local note
-	if strict and socketedItems > 0 and gemsFound == 0 then
+	local gemsIncomplete = strict and socketedItems > 0 and gemsFound == 0
+	if gemsIncomplete then
 		note = GearCheck:T("GEM_NOTE")
 	end
-	return issues, note
+
+	local defense
+	if context.role == "tank" and strict then
+		defense = tankDefense(unit, context, gemsIncomplete)
+		if defense.immune == false then
+			addIssue(issues, GearCheck:T("DEFENSE"), defense.issue)
+		end
+	end
+	return issues, note, defense
 end

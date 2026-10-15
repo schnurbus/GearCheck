@@ -51,6 +51,7 @@ Befunde können sein:
 - Ab Stufe 80: leere Sockel, fehlende Verzauberung, fehlende Gürtelschnalle.
 - Krieger- und Paladin-Tanks ohne Schild.
 - Jäger ohne Fernkampfwaffe.
+- Stufe-80-Tanks ohne Crit-Immunität. In den Details steht die Verteidigung; Abhärtung zählt mit, auch die Große Inschrift des Gladiators auf den Schultern. Bären sind mit Überleben des Stärkeren 3/3 immun.
 
 Fehlende Verzauberungen gelten für Kopf, Schulter, Umhang, Brust, Handgelenke, Hände, Beine, Füße und die Waffenhand. Die Schildhand wird nur verlangt, wenn dort ein Schild liegt. Die Fernkampfwaffe nur bei Jägern.
 
