@@ -3,8 +3,9 @@ local _, GearCheck = ...
 local InspectView = {}
 GearCheck.InspectView = InspectView
 
-local PANEL_WIDTH = 260
+local PANEL_WIDTH = 248
 local DOCK = 28
+local PANEL_OFFSET_Y = -18
 local TAB_WIDTH = 16
 local TAB_HEIGHT = 54
 local TAB_Y = -58
@@ -12,6 +13,24 @@ local TAB_OVERHANG = 10
 local TAB_LINE = 2
 local VISIBLE_RIGHT = 28
 local VISIBLE_LEFT = 10
+local STATUS_ROWS = 8
+local ROW_GAP = 2
+
+local GOLD = { 1, 0.82, 0 }
+local GREEN = { 0.12, 1, 0.12 }
+local RED = { 1, 0.2, 0.2 }
+local MUTED = { 0.55, 0.55, 0.55 }
+local WHITE = { 1, 1, 1 }
+local RULE = { 0.55, 0.45, 0.2, 0.85 }
+
+local PANEL_BACKDROP = {
+	bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+	edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+	tile = true,
+	tileSize = 16,
+	edgeSize = 14,
+	insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
 
 local watch = CreateFrame("Frame", nil, UIParent)
 watch:SetWidth(1)
@@ -21,6 +40,55 @@ watch:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
 watch:Hide()
 InspectView.watch = watch
 
+local function setColor(font, color)
+	font:SetTextColor(color[1], color[2], color[3])
+end
+
+local function makeRule(parent)
+	local rule = parent:CreateTexture(nil, "ARTWORK")
+	rule:SetHeight(1)
+	rule:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
+	rule:SetVertexColor(RULE[1], RULE[2], RULE[3], RULE[4])
+	return rule
+end
+
+local function applyInsetStyle(frame)
+	frame:SetBackdrop(PANEL_BACKDROP)
+	frame:SetBackdropColor(0, 0, 0, 0.92)
+	frame:SetBackdropBorderColor(0.55, 0.55, 0.55, 1)
+end
+
+local function averageLevel(gear)
+	if not gear then return nil end
+	local sum, count = 0, 0
+	for index = 1, #gear do
+		local level = gear[index].level
+		if level and level > 0 then
+			sum = sum + level
+			count = count + 1
+		end
+	end
+	if count == 0 then return nil end
+	return math.floor(sum / count + 0.5)
+end
+
+local function isReady(record)
+	return record and record.status == "done" and (not record.issues or #record.issues == 0)
+end
+
+local function readyLabel(record)
+	if not record or record.status == "pending" or record.status == "scanning" then
+		return GearCheck:T("SCANNING_DETAIL"), MUTED
+	end
+	if record.status ~= "done" then
+		return record.statusText or GearCheck:T("NOT_INSPECTABLE_DETAIL"), RED
+	end
+	if isReady(record) then
+		return GearCheck:T("READY_YES"), GREEN
+	end
+	return GearCheck:T("READY_NO"), RED
+end
+
 local function headerText(record)
 	if not record or record.status == "pending" or record.status == "scanning" then
 		return GearCheck:T("SCANNING_DETAIL")
@@ -29,6 +97,71 @@ local function headerText(record)
 		return record.statusText or GearCheck:T("NOT_INSPECTABLE_DETAIL")
 	end
 	return GearCheck.UI:SummaryText(record)
+end
+
+local function createStatusRow(parent)
+	local row = CreateFrame("Frame", nil, parent)
+	row:SetHeight(14)
+	row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	row.label:SetPoint("LEFT", row, "LEFT", 0, 0)
+	row.label:SetJustifyH("LEFT")
+	setColor(row.label, GOLD)
+	row.value = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	row.value:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+	row.value:SetJustifyH("RIGHT")
+	setColor(row.value, WHITE)
+	row:Hide()
+	return row
+end
+
+local function paintStatusRow(row, label, value, color, width)
+	row:SetWidth(width)
+	row.label:SetWidth(math.floor(width * 0.48))
+	row.value:SetWidth(math.floor(width * 0.5))
+	row.label:SetText(label or "")
+	row.value:SetText(value or "")
+	setColor(row.value, color or WHITE)
+	row:Show()
+end
+
+local function fillStatusRows(rows, record, width)
+	local shown = 0
+	local function add(label, value, color)
+		shown = shown + 1
+		if shown > #rows then return end
+		paintStatusRow(rows[shown], label, value, color, width)
+	end
+
+	local readyText, readyColor = readyLabel(record)
+	add(GearCheck:T("LABEL_READY"), readyText, readyColor)
+
+	if record and record.status == "done" then
+		add(GearCheck:T("LABEL_ROLE"), record.roleLabel or GearCheck:T("ROLE_UNKNOWN"), WHITE)
+		local average = averageLevel(record.gear)
+		if average then
+			add(GearCheck:T("LABEL_ILVL"), tostring(average), WHITE)
+		end
+		local score = GearCheck:GearScoreFor(record)
+		if score then
+			add(GearCheck:T("LABEL_GS"), tostring(score), WHITE)
+		end
+		if record.defense and record.defense.summary then
+			local color = MUTED
+			if record.defense.immune == true then
+				color = GREEN
+			elseif record.defense.immune == false then
+				color = RED
+			end
+			add(GearCheck:T("DEFENSE"), record.defense.summary, color)
+		end
+		local count = record.issues and #record.issues or 0
+		add(GearCheck:T("LABEL_ISSUES"), tostring(count), count > 0 and RED or GREEN)
+	end
+
+	for index = shown + 1, #rows do
+		rows[index]:Hide()
+	end
+	return shown
 end
 
 function InspectView:CanWhisper(record)
@@ -175,38 +308,68 @@ function InspectView:EnsurePanel()
 	panel:SetWidth(PANEL_WIDTH)
 	panel:SetFrameStrata("HIGH")
 	panel:EnableMouse(true)
-	panel:SetBackdrop({
-		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-		tile = true,
-		tileSize = 32,
-		edgeSize = 32,
-		insets = { left = 11, right = 12, top = 12, bottom = 11 },
-	})
+	applyInsetStyle(panel)
 	panel:Hide()
 
 	local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	title:SetPoint("TOPLEFT", panel, "TOPLEFT", 18, -16)
+	title:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -10)
+	title:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -12, -10)
+	title:SetJustifyH("CENTER")
 	title:SetText("GearCheck")
+	setColor(title, GOLD)
 	self.title = title
 
 	local name = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	name:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-	name:SetJustifyH("LEFT")
+	name:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, -4)
+	name:SetJustifyH("CENTER")
 	self.nameText = name
 
+	local ruleTop = makeRule(panel)
+	ruleTop:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -6)
+	ruleTop:SetPoint("TOPRIGHT", name, "BOTTOMRIGHT", 0, -6)
+	self.ruleTop = ruleTop
+
+	local statusHost = CreateFrame("Frame", nil, panel)
+	statusHost:SetPoint("TOPLEFT", ruleTop, "BOTTOMLEFT", 0, -6)
+	statusHost:SetPoint("TOPRIGHT", ruleTop, "BOTTOMRIGHT", 0, -6)
+	statusHost:SetHeight(STATUS_ROWS * (14 + ROW_GAP))
+	self.statusHost = statusHost
+
+	local statusRows = {}
+	for index = 1, STATUS_ROWS do
+		local row = createStatusRow(statusHost)
+		if index == 1 then
+			row:SetPoint("TOPLEFT", statusHost, "TOPLEFT", 0, 0)
+		else
+			row:SetPoint("TOPLEFT", statusRows[index - 1], "BOTTOMLEFT", 0, -ROW_GAP)
+		end
+		statusRows[index] = row
+	end
+	self.statusRows = statusRows
+
+	local ruleMid = makeRule(panel)
+	ruleMid:SetPoint("TOPLEFT", statusHost, "BOTTOMLEFT", 0, -4)
+	ruleMid:SetPoint("TOPRIGHT", statusHost, "BOTTOMRIGHT", 0, -4)
+	self.ruleMid = ruleMid
+
+	local findings = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	findings:SetPoint("TOPLEFT", ruleMid, "BOTTOMLEFT", 0, -6)
+	findings:SetText(GearCheck:T("SECTION_FINDINGS"))
+	setColor(findings, GOLD)
+	self.findingsLabel = findings
+
+	-- Kept for collapse show/hide compatibility with previous layout.
 	local summary = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	summary:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -6)
-	summary:SetJustifyH("LEFT")
-	summary:SetJustifyV("TOP")
+	summary:Hide()
 	self.summary = summary
 
 	local scroll = CreateFrame("ScrollFrame", "GearCheckInspectScroll", panel, "UIPanelScrollFrameTemplate")
-	scroll:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", -2, -8)
+	scroll:SetPoint("TOPLEFT", findings, "BOTTOMLEFT", -2, -4)
 	self.scroll = scroll
 
 	local content = CreateFrame("Frame", nil, scroll)
-	content:SetWidth(240)
+	content:SetWidth(200)
 	content:SetHeight(1)
 	scroll:SetScrollChild(content)
 	self.content = content
@@ -217,11 +380,20 @@ function InspectView:EnsurePanel()
 	body:SetJustifyV("TOP")
 	self.body = body
 
+	local function fitPanelButton(widget)
+		local width = (widget:GetTextWidth() or 0) + 28
+		if width < 48 then
+			width = 48
+		end
+		widget:SetWidth(width)
+	end
+	self.fitPanelButton = fitPanelButton
+
 	local button = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	button:SetHeight(24)
-	button:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 16, 14)
-	button:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -16, 14)
+	button:SetHeight(22)
+	button:SetPoint("BOTTOM", panel, "BOTTOM", 0, 10)
 	button:SetText(GearCheck:T("BUTTON_WHISPER"))
+	fitPanelButton(button)
 	button:SetScript("OnClick", function()
 		if InspectView.record then
 			GearCheck.Whisper:ConfirmOne(InspectView.record)
@@ -236,14 +408,15 @@ function InspectView:EnsurePanel()
 	toggle:SetFrameStrata("HIGH")
 	toggle:SetHitRectInsets(-6, -6, -4, -4)
 	toggle:SetBackdrop({
-		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+		bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
 		tile = true,
-		tileSize = 32,
+		tileSize = 16,
 	})
+	toggle:SetBackdropColor(0, 0, 0, 0.85)
 	local function tabLine()
 		local line = toggle:CreateTexture(nil, "ARTWORK")
 		line:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
-		line:SetVertexColor(0.78, 0.64, 0.32, 1)
+		line:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1)
 		return line
 	end
 	toggle.lineTop = tabLine()
@@ -271,9 +444,9 @@ function InspectView:EnsurePanel()
 		GameTooltip:Show()
 	end)
 	toggle:SetScript("OnLeave", function(self)
-		self.lineTop:SetVertexColor(0.78, 0.64, 0.32, 1)
-		self.lineBottom:SetVertexColor(0.78, 0.64, 0.32, 1)
-		self.lineOuter:SetVertexColor(0.78, 0.64, 0.32, 1)
+		self.lineTop:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1)
+		self.lineBottom:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1)
+		self.lineOuter:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1)
 		GameTooltip:Hide()
 	end)
 	toggle:Hide()
@@ -304,11 +477,11 @@ function InspectView:Place()
 	if side == self.side then return end
 	self.side = side
 	panel:ClearAllPoints()
-	panel:SetHeight(math.floor((parent:GetHeight() or 512) * 0.5))
+	panel:SetHeight(math.floor((parent:GetHeight() or 512) * 0.62))
 	if side == "left" then
-		panel:SetPoint("TOPRIGHT", parent, "TOPLEFT", DOCK, 0)
+		panel:SetPoint("TOPRIGHT", parent, "TOPLEFT", DOCK, PANEL_OFFSET_Y)
 	else
-		panel:SetPoint("TOPLEFT", parent, "TOPRIGHT", -DOCK, 0)
+		panel:SetPoint("TOPLEFT", parent, "TOPRIGHT", -DOCK, PANEL_OFFSET_Y)
 	end
 	panel:SetFrameLevel((parent:GetFrameLevel() or 0) + 5)
 	self:ApplyCollapse()
@@ -341,7 +514,10 @@ function InspectView:ApplyCollapse()
 	if collapsed then
 		self.title:Hide()
 		self.nameText:Hide()
-		self.summary:Hide()
+		if self.ruleTop then self.ruleTop:Hide() end
+		if self.statusHost then self.statusHost:Hide() end
+		if self.ruleMid then self.ruleMid:Hide() end
+		if self.findingsLabel then self.findingsLabel:Hide() end
 		self.scroll:Hide()
 		self.button:Hide()
 		panel:Hide()
@@ -349,7 +525,10 @@ function InspectView:ApplyCollapse()
 		panel:SetWidth(PANEL_WIDTH)
 		self.title:Show()
 		self.nameText:Show()
-		self.summary:Show()
+		if self.ruleTop then self.ruleTop:Show() end
+		if self.statusHost then self.statusHost:Show() end
+		if self.ruleMid then self.ruleMid:Show() end
+		if self.findingsLabel then self.findingsLabel:Show() end
 		self.scroll:Show()
 		if parent and parent:IsShown() then
 			panel:Show()
@@ -489,12 +668,18 @@ function InspectView:EnsureTab()
 	local page = CreateFrame("Frame", "GearCheckInspectPage", InspectFrame, "GearCheckInspectTemplate")
 	page:Hide()
 	self.page = page
-	self.pageSummary = _G[page:GetName() .. "Summary"]
-	self.pageScroll = _G[page:GetName() .. "Scroll"]
-	self.pageButton = _G[page:GetName() .. "Whisper"]
+	local inset = _G[page:GetName() .. "Inset"]
+	self.pageInset = inset
+	if inset then
+		applyInsetStyle(inset)
+	end
+	self.pageSummary = _G[page:GetName() .. "InsetSummary"]
+	self.pageReady = _G[page:GetName() .. "InsetReady"]
+	self.pageScroll = _G[page:GetName() .. "InsetScroll"]
+	self.pageButton = _G[page:GetName() .. "InsetWhisper"]
 	self.portrait = _G[page:GetName() .. "Portrait"]
 	local function fitWhisperButton(button)
-		local width = (button:GetTextWidth() or 0) + 36
+		local width = (button:GetTextWidth() or 0) + 28
 		if width < 48 then
 			width = 48
 		end
@@ -516,6 +701,15 @@ function InspectView:EnsureTab()
 	scroll:SetScrollChild(content)
 	self.pageContent = content
 
+	local gearHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	gearHeader:SetJustifyH("LEFT")
+	gearHeader:SetText(GearCheck:T("SECTION_GEAR"))
+	setColor(gearHeader, GOLD)
+	self.pageGearHeader = gearHeader
+
+	local gearRule = makeRule(content)
+	self.pageGearRule = gearRule
+
 	local rows = {}
 	local count = #GearCheck.Data.slots
 	for index = 1, count do
@@ -526,7 +720,7 @@ function InspectView:EnsureTab()
 		if rowHighlight then
 			rowHighlight:SetBlendMode("ADD")
 		end
-		widget.slot = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		widget.slot = widget:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 		widget.slot:SetPoint("TOPLEFT", widget, "TOPLEFT", 0, -6)
 		widget.slot:SetWidth(84)
 		widget.slot:SetJustifyH("RIGHT")
@@ -537,7 +731,14 @@ function InspectView:EnsureTab()
 		widget.shade = widget:CreateTexture(nil, "BACKGROUND")
 		widget.shade:SetPoint("TOPLEFT", widget.icon, "TOPLEFT", -1, 1)
 		widget.shade:SetPoint("BOTTOMRIGHT", widget.icon, "BOTTOMRIGHT", 1, -1)
-		widget.shade:SetTexture(0, 0, 0, 0.8)
+		widget.shade:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
+		widget.shade:SetVertexColor(0, 0, 0, 0.9)
+		widget.border = widget:CreateTexture(nil, "OVERLAY")
+		widget.border:SetPoint("TOPLEFT", widget.icon, "TOPLEFT", -1, 1)
+		widget.border:SetPoint("BOTTOMRIGHT", widget.icon, "BOTTOMRIGHT", 1, -1)
+		widget.border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+		widget.border:SetBlendMode("ADD")
+		widget.border:SetAlpha(0.35)
 		widget.name = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		widget.name:SetPoint("TOPLEFT", widget, "TOPLEFT", 114, -1)
 		widget.name:SetHeight(14)
@@ -554,12 +755,11 @@ function InspectView:EnsureTab()
 		widget.issues:SetPoint("TOPLEFT", widget, "TOPLEFT", 114, -32)
 		widget.issues:SetJustifyH("LEFT")
 		widget.issues:SetJustifyV("TOP")
-		widget.issues:SetTextColor(1, 0.5, 0.5)
-		widget.rule = widget:CreateTexture(nil, "BACKGROUND")
-		widget.rule:SetHeight(1)
+		setColor(widget.issues, RED)
+		widget.rule = makeRule(widget)
 		widget.rule:SetPoint("BOTTOMLEFT", widget, "BOTTOMLEFT", 0, 0)
 		widget.rule:SetPoint("BOTTOMRIGHT", widget, "BOTTOMRIGHT", 0, 0)
-		widget.rule:SetTexture(1, 1, 1, 0.1)
+		widget.rule:SetVertexColor(1, 1, 1, 0.08)
 		widget:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			if self.link then
@@ -591,6 +791,15 @@ function InspectView:EnsureTab()
 	end
 	self.gearRows = rows
 
+	local findingsHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	findingsHeader:SetJustifyH("LEFT")
+	findingsHeader:SetText(GearCheck:T("SECTION_FINDINGS"))
+	setColor(findingsHeader, GOLD)
+	self.pageFindingsHeader = findingsHeader
+
+	local findingsRule = makeRule(content)
+	self.pageFindingsRule = findingsRule
+
 	local leftover = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	leftover:SetJustifyH("LEFT")
 	leftover:SetJustifyV("TOP")
@@ -606,75 +815,11 @@ function InspectView:EnsureTab()
 	end)
 end
 
-local INSPECT_SLOTS = {
-	"InspectHeadSlot",
-	"InspectNeckSlot",
-	"InspectShoulderSlot",
-	"InspectBackSlot",
-	"InspectChestSlot",
-	"InspectShirtSlot",
-	"InspectTabardSlot",
-	"InspectWristSlot",
-	"InspectHandsSlot",
-	"InspectWaistSlot",
-	"InspectLegsSlot",
-	"InspectFeetSlot",
-	"InspectFinger0Slot",
-	"InspectFinger1Slot",
-	"InspectTrinket0Slot",
-	"InspectTrinket1Slot",
-	"InspectMainHandSlot",
-	"InspectSecondaryHandSlot",
-	"InspectRangedSlot",
-}
-
-local function restorePaperDoll()
-	local paper = InspectPaperDollFrame
-	if not paper or not paper:IsShown() then return end
-	if InspectModelFrame then
-		InspectModelFrame:SetAlpha(1)
-		InspectModelFrame:Show()
-	end
-	for index = 1, #INSPECT_SLOTS do
-		local name = INSPECT_SLOTS[index]
-		local button = _G[name]
-		if button then
-			button:SetAlpha(1)
-			button:Show()
-			button:EnableMouse(true)
-			local icon = _G[name .. "IconTexture"]
-			if icon then
-				icon:SetAlpha(1)
-			end
-			if button.GetNormalTexture then
-				local normal = button:GetNormalTexture()
-				if normal then
-					normal:SetAlpha(1)
-				end
-			end
-		end
-	end
-	if InspectPaperDollFrame_OnShow then
-		InspectPaperDollFrame_OnShow()
-	end
-end
-
-local dollRefresh = CreateFrame("Frame")
-dollRefresh:Hide()
-dollRefresh:SetScript("OnUpdate", function(self)
-	self:Hide()
-	restorePaperDoll()
-end)
-
 function InspectView:OnTab(newID)
 	if not self.page then return end
 	if newID ~= self.tabId then
 		self.page:Hide()
 		self.page:SetFrameLevel(1)
-		if newID == 1 then
-			restorePaperDoll()
-			dollRefresh:Show()
-		end
 		return
 	end
 	local level = (InspectFrame:GetFrameLevel() or 1) + 1
@@ -702,9 +847,17 @@ local function paintGearRow(widget, entry, issueText, playerRole)
 	widget.itemName = entry.itemName
 	widget.slot:SetText(entry.name or "")
 	if issueText ~= "" then
-		widget.slot:SetTextColor(1, 0.45, 0.45)
+		setColor(widget.slot, RED)
+		if widget.border then
+			widget.border:SetVertexColor(RED[1], RED[2], RED[3])
+			widget.border:SetAlpha(0.55)
+		end
 	else
-		widget.slot:SetTextColor(0.9, 0.8, 0.45)
+		setColor(widget.slot, GOLD)
+		if widget.border then
+			widget.border:SetVertexColor(GOLD[1], GOLD[2], GOLD[3])
+			widget.border:SetAlpha(0.3)
+		end
 	end
 	paintIcon(widget, entry)
 	if entry.itemName then
@@ -713,14 +866,14 @@ local function paintGearRow(widget, entry, issueText, playerRole)
 		if color then
 			widget.name:SetTextColor(color.r, color.g, color.b)
 		else
-			widget.name:SetTextColor(1, 1, 1)
+			setColor(widget.name, WHITE)
 		end
 	elseif entry.link then
 		widget.name:SetText("...")
-		widget.name:SetTextColor(1, 1, 1)
+		setColor(widget.name, WHITE)
 	else
 		widget.name:SetText(GearCheck:T("EMPTY"))
-		widget.name:SetTextColor(0.55, 0.55, 0.55)
+		setColor(widget.name, MUTED)
 	end
 	if entry.level then
 		widget.level:SetText(entry.level)
@@ -728,7 +881,7 @@ local function paintGearRow(widget, entry, issueText, playerRole)
 		if color then
 			widget.level:SetTextColor(color.r, color.g, color.b)
 		else
-			widget.level:SetTextColor(1, 1, 1)
+			setColor(widget.level, WHITE)
 		end
 	else
 		widget.level:SetText("")
@@ -742,7 +895,7 @@ local function paintGearRow(widget, entry, issueText, playerRole)
 		widget.roleR, widget.roleG, widget.roleB = r, g, b
 	else
 		widget.role:SetText(entry.empty and "" or "—")
-		widget.role:SetTextColor(0.55, 0.55, 0.55)
+		setColor(widget.role, MUTED)
 		widget.roleLabel = nil
 	end
 	widget.issues:SetText(issueText)
@@ -782,10 +935,18 @@ function InspectView:RenderPage()
 		SetPortraitTexture(self.portrait, unit)
 	end
 
-	local textWidth = math.max((page:GetWidth() or 384) - 120, 150)
+	local inset = self.pageInset
+	local textWidth = math.max(((inset and inset:GetWidth()) or (page:GetWidth() or 384) - 52) - 20, 150)
 	local summary = self.pageSummary
 	summary:SetWidth(textWidth)
 	summary:SetText(headerText(record))
+
+	local ready = self.pageReady
+	if ready then
+		local readyText, readyColor = readyLabel(record)
+		ready:SetText(GearCheck:T("LABEL_READY") .. ": " .. readyText)
+		setColor(ready, readyColor)
+	end
 
 	local showButton = self:CanWhisper(record)
 	local button = self.pageButton
@@ -801,8 +962,18 @@ function InspectView:RenderPage()
 		if self.fitWhisperButton then
 			self.fitWhisperButton(button)
 		end
+		if ready then
+			ready:ClearAllPoints()
+			ready:SetPoint("BOTTOMLEFT", inset, "BOTTOMLEFT", 10, 8)
+			ready:SetPoint("RIGHT", button, "LEFT", -8, 0)
+		end
 	else
 		button:Hide()
+		if ready then
+			ready:ClearAllPoints()
+			ready:SetPoint("BOTTOMLEFT", inset, "BOTTOMLEFT", 10, 8)
+			ready:SetPoint("BOTTOMRIGHT", inset, "BOTTOMRIGHT", -10, 8)
+		end
 	end
 
 	local scroll = self.pageScroll
@@ -810,13 +981,6 @@ function InspectView:RenderPage()
 	if self.pageGuid ~= self.guid then
 		self.pageGuid = self.guid
 		offset = 0
-	end
-	scroll:ClearAllPoints()
-	scroll:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -8)
-	if showButton then
-		scroll:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", -70, 116)
-	else
-		scroll:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", -70, 88)
 	end
 
 	local rowWidth = math.max((scroll:GetWidth() or textWidth) - 4, 140)
@@ -826,6 +990,26 @@ function InspectView:RenderPage()
 	local used = {}
 	local playerRole = record and record.role
 	local y = 0
+	local content = self.pageContent
+
+	local gearHeader = self.pageGearHeader
+	local gearRule = self.pageGearRule
+	if gear then
+		gearHeader:ClearAllPoints()
+		gearHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+		gearHeader:SetWidth(rowWidth)
+		gearHeader:Show()
+		y = y + (gearHeader:GetStringHeight() or 14) + 2
+		gearRule:ClearAllPoints()
+		gearRule:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+		gearRule:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
+		gearRule:Show()
+		y = y + 6
+	else
+		gearHeader:Hide()
+		gearRule:Hide()
+	end
+
 	for index = 1, #self.gearRows do
 		local widget = self.gearRows[index]
 		local entry = gear and gear[index]
@@ -850,37 +1034,62 @@ function InspectView:RenderPage()
 			widget:SetWidth(rowWidth)
 			widget:SetHeight(height)
 			widget:ClearAllPoints()
-			widget:SetPoint("TOPLEFT", self.pageContent, "TOPLEFT", 0, -y)
+			widget:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
 			y = y + height + 2
 			widget:Show()
 		end
 	end
 
-	local extra = {}
-	for name, list in pairs(grouped) do
-		if not used[name] then
-			for index = 1, #list do
-				extra[#extra + 1] = "|cffff8080" .. name .. ":|r " .. list[index]
+	local findingsHeader = self.pageFindingsHeader
+	local findingsRule = self.pageFindingsRule
+	y = y + 6
+	findingsHeader:ClearAllPoints()
+	findingsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+	findingsHeader:SetWidth(rowWidth)
+	findingsHeader:Show()
+	y = y + (findingsHeader:GetStringHeight() or 14) + 2
+	findingsRule:ClearAllPoints()
+	findingsRule:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+	findingsRule:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
+	findingsRule:Show()
+	y = y + 6
+
+	local findings = {}
+	if record and record.status == "done" then
+		if not record.issues or #record.issues == 0 then
+			findings[1] = "|cff1eff1e" .. GearCheck:T("NO_ISSUES") .. "|r"
+		else
+			for index = 1, #record.issues do
+				local issue = record.issues[index]
+				findings[#findings + 1] = "|cffff3333" .. issue.slot .. ":|r " .. issue.text
 			end
 		end
 	end
+	for name, list in pairs(grouped) do
+		if not used[name] then
+			for index = 1, #list do
+				findings[#findings + 1] = "|cffff3333" .. name .. ":|r " .. list[index]
+			end
+		end
+	end
+
 	local leftover = self.pageLeftover
 	leftover:ClearAllPoints()
 	leftover:SetWidth(rowWidth)
-	if #extra > 0 then
-		leftover:SetPoint("TOPLEFT", self.pageContent, "TOPLEFT", 0, -y)
-		leftover:SetText(table.concat(extra, "\n"))
+	leftover:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+	if #findings > 0 then
+		leftover:SetText(table.concat(findings, "\n"))
 		local extraHeight = leftover:GetStringHeight() or 0
 		if extraHeight < 1 then
-			extraHeight = #extra * 12
+			extraHeight = #findings * 12
 		end
 		y = y + extraHeight + 4
 	else
 		leftover:SetText("")
 	end
 
-	self.pageContent:SetWidth(rowWidth)
-	self.pageContent:SetHeight(math.max(y, 1))
+	content:SetWidth(rowWidth)
+	content:SetHeight(math.max(y, 1))
 	scroll:UpdateScrollChildRect()
 	local range = scroll:GetVerticalScrollRange() or 0
 	if offset > range then
@@ -901,7 +1110,7 @@ function InspectView:Render()
 	if record and record.status == "done" and GearCheck.Classify.Complete then
 		GearCheck.Classify.Complete(record)
 	end
-	local textWidth = math.max((panel:GetWidth() or PANEL_WIDTH) - 52, 140)
+	local textWidth = math.max((panel:GetWidth() or PANEL_WIDTH) - 24, 140)
 	local offset = 0
 	if self.scroll then
 		offset = self.scroll:GetVerticalScroll() or 0
@@ -916,12 +1125,13 @@ function InspectView:Render()
 		local color = RAID_CLASS_COLORS[record.class]
 		name:SetTextColor(color.r, color.g, color.b)
 	else
-		name:SetTextColor(1, 1, 1)
+		setColor(name, WHITE)
 	end
 	name:SetText(record and record.name or "")
 
-	self.summary:SetWidth(textWidth)
-	self.summary:SetText(headerText(record))
+	local shown = fillStatusRows(self.statusRows, record, textWidth)
+	local hostHeight = math.max(shown, 1) * (14 + ROW_GAP)
+	self.statusHost:SetHeight(hostHeight)
 
 	local showButton = self:CanWhisper(record)
 	if showButton then
@@ -933,21 +1143,28 @@ function InspectView:Render()
 			self.button:Enable()
 			self.button:SetText(GearCheck:T("BUTTON_WHISPER"))
 		end
+		if self.fitPanelButton then
+			self.fitPanelButton(self.button)
+		end
 	else
 		self.button:Hide()
 	end
 
 	self.scroll:ClearAllPoints()
-	self.scroll:SetPoint("TOPLEFT", self.summary, "BOTTOMLEFT", -2, -8)
+	self.scroll:SetPoint("TOPLEFT", self.findingsLabel, "BOTTOMLEFT", -2, -4)
 	if showButton then
-		self.scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -32, 46)
+		self.scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 36)
 	else
-		self.scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -32, 16)
+		self.scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 12)
 	end
 
 	self.body:SetWidth(textWidth)
 	if record and record.status == "done" then
 		self.body:SetText(GearCheck.UI:IssuesText(record))
+	elseif record and (record.status == "pending" or record.status == "scanning") then
+		self.body:SetText("|cff888888" .. GearCheck:T("SCANNING_DETAIL") .. "|r")
+	elseif record then
+		self.body:SetText("|cffff3333" .. (record.statusText or GearCheck:T("NOT_INSPECTABLE_DETAIL")) .. "|r")
 	else
 		self.body:SetText("")
 	end

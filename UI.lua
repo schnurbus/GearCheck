@@ -187,6 +187,16 @@ local function button(text, width)
 	return widget
 end
 
+local function findRecord(key)
+	local results = GearCheck.results or {}
+	for index = 1, #results do
+		if results[index].key == key then
+			return results[index]
+		end
+	end
+	return nil
+end
+
 local targetButton = button(GearCheck:T("BUTTON_TARGET"), 150)
 targetButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, 16)
 targetButton:SetScript("OnClick", function()
@@ -199,12 +209,22 @@ groupButton:SetScript("OnClick", function()
 	GearCheck.Scan:ScanGroup()
 end)
 
-local whisperButton = button(GearCheck:T("BUTTON_WHISPER"), 210)
-whisperButton:SetPoint("LEFT", groupButton, "RIGHT", 8, 0)
-whisperButton:SetScript("OnClick", function()
+local whisperOneButton = button(GearCheck:T("BUTTON_WHISPER_ONE"), 140)
+whisperOneButton:SetPoint("LEFT", groupButton, "RIGHT", 8, 0)
+whisperOneButton:SetScript("OnClick", function()
+	local record = findRecord(UI.selectedKey)
+	if record then
+		GearCheck.Whisper:SendOne(record)
+	end
+end)
+UI.whisperOneButton = whisperOneButton
+
+local whisperAllButton = button(GearCheck:T("BUTTON_WHISPER_ALL"), 230)
+whisperAllButton:SetPoint("LEFT", whisperOneButton, "RIGHT", 8, 0)
+whisperAllButton:SetScript("OnClick", function()
 	GearCheck.Whisper:Confirm()
 end)
-UI.whisperButton = whisperButton
+UI.whisperAllButton = whisperAllButton
 
 frame:SetScript("OnDragStart", function(self)
 	self:StartMoving()
@@ -216,16 +236,6 @@ end)
 frame:SetScript("OnShow", function()
 	UI:Refresh()
 end)
-
-local function findRecord(key)
-	local results = GearCheck.results or {}
-	for index = 1, #results do
-		if results[index].key == key then
-			return results[index]
-		end
-	end
-	return nil
-end
 
 local function rowInfo(record)
 	if record.status == "pending" or record.status == "scanning" then
@@ -348,12 +358,12 @@ function UI:IssuesText(record)
 		return ""
 	end
 	if not record.issues or #record.issues == 0 then
-		return "|cff80ff80" .. GearCheck:T("NO_ISSUES") .. "|r"
+		return "|cff1eff1e" .. GearCheck:T("NO_ISSUES") .. "|r"
 	end
 	local lines = {}
 	for index = 1, #record.issues do
 		local issue = record.issues[index]
-		lines[#lines + 1] = "|cffff8080" .. issue.slot .. ":|r " .. issue.text
+		lines[#lines + 1] = "|cffff3333" .. issue.slot .. ":|r " .. issue.text
 	end
 	return table.concat(lines, "\n")
 end
@@ -573,17 +583,28 @@ function UI:Refresh()
 
 	status:SetText(GearCheck.Scan and GearCheck.Scan.status or GearCheck:T("READY"))
 
-	if GearCheck.Whisper and GearCheck.Whisper:IsBusy() then
-		whisperButton:Disable()
-		whisperButton:SetText(GearCheck:T("WHISPERING"))
+	local whisper = GearCheck.Whisper
+	local busy = whisper and whisper:IsBusy()
+	if busy then
+		whisperOneButton:Disable()
+		whisperOneButton:SetText(GearCheck:T("WHISPERING"))
+		whisperAllButton:Disable()
+		whisperAllButton:SetText(GearCheck:T("WHISPERING"))
 	else
-		local count = GearCheck.Whisper and GearCheck.Whisper:Count() or 0
-		if count > 0 then
-			whisperButton:Enable()
-			whisperButton:SetText(GearCheck:T("BUTTON_WHISPER_COUNT", count))
+		if whisper and whisper:CanSend(record) then
+			whisperOneButton:Enable()
 		else
-			whisperButton:Disable()
-			whisperButton:SetText(GearCheck:T("BUTTON_WHISPER"))
+			whisperOneButton:Disable()
+		end
+		whisperOneButton:SetText(GearCheck:T("BUTTON_WHISPER_ONE"))
+
+		local count = whisper and whisper:Count() or 0
+		if count > 0 then
+			whisperAllButton:Enable()
+			whisperAllButton:SetText(GearCheck:T("BUTTON_WHISPER_ALL_COUNT", count))
+		else
+			whisperAllButton:Disable()
+			whisperAllButton:SetText(GearCheck:T("BUTTON_WHISPER_ALL"))
 		end
 	end
 end

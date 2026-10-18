@@ -55,23 +55,6 @@
 					</Anchors>
 				</Texture>
 			</Layer>
-			<Layer level="BORDER">
-				<Texture name="$parentCenter" file="Interface\PaperDollInfoFrame\UI-Character-CharacterTab-L1">
-					<Anchors>
-						<Anchor point="TOPLEFT">
-							<Offset>
-								<AbsDimension x="16" y="-70"/>
-							</Offset>
-						</Anchor>
-						<Anchor point="BOTTOMRIGHT">
-							<Offset>
-								<AbsDimension x="-36" y="78"/>
-							</Offset>
-						</Anchor>
-					</Anchors>
-					<TexCoords left="0.55" right="0.78" top="0.42" bottom="0.72"/>
-				</Texture>
-			</Layer>
 			<Layer level="ARTWORK">
 				<Texture name="$parentPortrait">
 					<Size>
@@ -85,49 +68,78 @@
 						</Anchor>
 					</Anchors>
 				</Texture>
-				<FontString name="$parentSummary" inherits="GameFontHighlightSmall" justifyH="LEFT" justifyV="TOP">
-					<Anchors>
-						<Anchor point="TOPLEFT">
-							<Offset>
-								<AbsDimension x="28" y="-78"/>
-							</Offset>
-						</Anchor>
-						<Anchor point="TOPRIGHT">
-							<Offset>
-								<AbsDimension x="-72" y="-78"/>
-							</Offset>
-						</Anchor>
-					</Anchors>
-				</FontString>
 			</Layer>
 		</Layers>
 		<Frames>
-			<ScrollFrame name="$parentScroll" inherits="UIPanelScrollFrameTemplate">
+			<Frame name="$parentInset">
 				<Anchors>
-					<Anchor point="TOPLEFT" relativeTo="$parentSummary" relativePoint="BOTTOMLEFT">
+					<Anchor point="TOPLEFT">
 						<Offset>
-							<AbsDimension x="-2" y="-8"/>
+							<AbsDimension x="16" y="-74"/>
 						</Offset>
 					</Anchor>
 					<Anchor point="BOTTOMRIGHT">
 						<Offset>
-							<AbsDimension x="-70" y="88"/>
+							<AbsDimension x="-36" y="82"/>
 						</Offset>
 					</Anchor>
 				</Anchors>
-			</ScrollFrame>
-			<Button name="$parentWhisper" inherits="UIPanelButtonTemplate" hidden="true">
-				<Size>
-					<AbsDimension x="120" y="24"/>
-				</Size>
-				<Anchors>
-					<Anchor point="BOTTOMLEFT">
-						<Offset>
-							<AbsDimension x="28" y="84"/>
-						</Offset>
-					</Anchor>
-				</Anchors>
-			</Button>
+				<Layers>
+					<Layer level="ARTWORK">
+						<FontString name="$parentSummary" inherits="GameFontHighlightSmall" justifyH="LEFT" justifyV="TOP">
+							<Anchors>
+								<Anchor point="TOPLEFT">
+									<Offset>
+										<AbsDimension x="10" y="-10"/>
+									</Offset>
+								</Anchor>
+								<Anchor point="TOPRIGHT">
+									<Offset>
+										<AbsDimension x="-10" y="-10"/>
+									</Offset>
+								</Anchor>
+							</Anchors>
+						</FontString>
+						<FontString name="$parentReady" inherits="GameFontNormal" justifyH="LEFT">
+							<Anchors>
+								<Anchor point="BOTTOMLEFT">
+									<Offset>
+										<AbsDimension x="10" y="8"/>
+									</Offset>
+								</Anchor>
+							</Anchors>
+						</FontString>
+					</Layer>
+				</Layers>
+				<Frames>
+					<ScrollFrame name="$parentScroll" inherits="UIPanelScrollFrameTemplate">
+						<Anchors>
+							<Anchor point="TOPLEFT" relativeTo="$parentSummary" relativePoint="BOTTOMLEFT">
+								<Offset>
+									<AbsDimension x="-2" y="-8"/>
+								</Offset>
+							</Anchor>
+							<Anchor point="BOTTOMRIGHT">
+								<Offset>
+									<AbsDimension x="-28" y="28"/>
+								</Offset>
+							</Anchor>
+						</Anchors>
+					</ScrollFrame>
+					<Button name="$parentWhisper" inherits="UIPanelButtonTemplate" hidden="true">
+						<Size>
+							<AbsDimension x="120" y="20"/>
+						</Size>
+						<Anchors>
+							<Anchor point="BOTTOMRIGHT">
+								<Offset>
+									<AbsDimension x="-8" y="6"/>
+								</Offset>
+							</Anchor>
+						</Anchors>
+					</Button>
+				</Frames>
+			</Frame>
 		</Frames>
 	</Frame>
 </Ui>
