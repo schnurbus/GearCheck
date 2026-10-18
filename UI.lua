@@ -347,23 +347,48 @@ function UI:SummaryText(record)
 		end
 		lines[#lines + 1] = defense
 	end
+	if record.meta and record.meta.summary then
+		local meta = record.meta.summary
+		if record.meta.active then
+			meta = "|cff80ff80" .. meta .. "|r"
+		else
+			meta = "|cffff8080" .. meta .. "|r"
+		end
+		lines[#lines + 1] = meta
+	end
 	if record.note then
 		lines[#lines + 1] = "|cffffff80" .. record.note .. "|r"
 	end
 	return table.concat(lines, "\n")
 end
 
-function UI:IssuesText(record)
+-- showMeta: in der Details-Ansicht Meta aktiv/inaktiv melden; Seitenfenster lässt es weg
+-- (dort erscheint nur der Issue, wenn der Meta inaktiv ist).
+function UI:IssuesText(record, showMeta)
 	if not record or record.status ~= "done" then
 		return ""
 	end
-	if not record.issues or #record.issues == 0 then
-		return "|cff1eff1e" .. GearCheck:T("NO_ISSUES") .. "|r"
-	end
 	local lines = {}
-	for index = 1, #record.issues do
-		local issue = record.issues[index]
-		lines[#lines + 1] = "|cffff3333" .. issue.slot .. ":|r " .. issue.text
+	if showMeta and record.meta and record.meta.summary then
+		if record.meta.active then
+			lines[#lines + 1] = "|cff1eff1e" .. record.meta.summary .. "|r"
+		else
+			lines[#lines + 1] = "|cffff3333" .. record.meta.summary .. "|r"
+		end
+	end
+	local issues = record.issues
+	if issues then
+		local inactiveText = GearCheck:T("META_INACTIVE")
+		for index = 1, #issues do
+			local issue = issues[index]
+			local skip = showMeta and record.meta and not record.meta.active and issue.text == inactiveText
+			if not skip then
+				lines[#lines + 1] = "|cffff3333" .. issue.slot .. ":|r " .. issue.text
+			end
+		end
+	end
+	if #lines == 0 then
+		return "|cff1eff1e" .. GearCheck:T("NO_ISSUES") .. "|r"
 	end
 	return table.concat(lines, "\n")
 end
@@ -570,7 +595,7 @@ function UI:Refresh()
 	body:ClearAllPoints()
 	body:SetPoint("TOPLEFT", detailContent, "TOPLEFT", 4, -issuesTop)
 	body:SetWidth(textWidth)
-	body:SetText(self:IssuesText(record))
+	body:SetText(self:IssuesText(record, true))
 	local issuesHeight = body:GetStringHeight() or 0
 	detailContent:SetWidth(math.max(textWidth + 8, GEAR_COL * 2 + 4))
 	detailContent:SetHeight(math.max(issuesTop + issuesHeight + 12, 1))

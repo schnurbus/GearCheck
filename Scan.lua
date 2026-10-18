@@ -181,11 +181,12 @@ function Scan:ApplyResult(record, unit, spec)
 		record.gearScore = gearScore
 	end
 	record.defense = nil
+	record.meta = nil
 	if spec.role == "unknown" then
 		record.issues = {}
 		record.note = GearCheck:T("SPEC_UNCLEAR")
 	else
-		local issues, note, defense = GearCheck.Classify.Unit(unit, {
+		local issues, note, defense, meta = GearCheck.Classify.Unit(unit, {
 			role = spec.role,
 			class = record.class,
 			level = record.level,
@@ -193,6 +194,7 @@ function Scan:ApplyResult(record, unit, spec)
 		record.issues = issues or {}
 		record.note = note
 		record.defense = defense
+		record.meta = meta
 	end
 	self:UpdateUI()
 end

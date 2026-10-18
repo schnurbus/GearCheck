@@ -19,17 +19,9 @@ local function tooltipFrame()
 	return scanTip
 end
 
-function Classify.Lines(link)
+local function readTooltipLines()
 	local lines = {}
-	if not link then return lines end
 	local tip = tooltipFrame()
-	tip:ClearLines()
-	tip:SetOwner(UIParent, "ANCHOR_NONE")
-	local ok = pcall(tip.SetHyperlink, tip, link)
-	if not ok then
-		tip:Hide()
-		return lines
-	end
 	for index = 1, tip:NumLines() do
 		local left = _G["GearCheckScanTooltipTextLeft" .. index]
 		if left then
@@ -42,6 +34,32 @@ function Classify.Lines(link)
 	end
 	tip:Hide()
 	return lines
+end
+
+function Classify.Lines(link)
+	if not link then return {} end
+	local tip = tooltipFrame()
+	tip:ClearLines()
+	tip:SetOwner(UIParent, "ANCHOR_NONE")
+	local ok = pcall(tip.SetHyperlink, tip, link)
+	if not ok then
+		tip:Hide()
+		return {}
+	end
+	return readTooltipLines()
+end
+
+function Classify.InventoryLines(unit, slotId)
+	if not unit or not slotId then return {} end
+	local tip = tooltipFrame()
+	tip:ClearLines()
+	tip:SetOwner(UIParent, "ANCHOR_NONE")
+	local ok = pcall(tip.SetInventoryItem, tip, unit, slotId)
+	if not ok then
+		tip:Hide()
+		return {}
+	end
+	return readTooltipLines()
 end
 
 function Classify.ParseLink(link)
@@ -819,6 +837,290 @@ local function shortName(name)
 	return name
 end
 
+-- Numerische Gem-Subklassen (WotLK); auf neueren Clients zusätzlich verfügbar.
+local SUBCLASS_COLOR = {
+	[0] = "red",
+	[1] = "blue",
+	[2] = "yellow",
+	[3] = "purple",
+	[4] = "green",
+	[5] = "orange",
+	[6] = "meta",
+	[7] = "simple",
+	[8] = "prismatic",
+}
+
+local SUBTYPE_COLOR = {
+	Red = "red",
+	Rot = "red",
+	Yellow = "yellow",
+	Gelb = "yellow",
+	Blue = "blue",
+	Blau = "blue",
+	Orange = "orange",
+	Purple = "purple",
+	Violett = "purple",
+	Green = "green",
+	["Grün"] = "green",
+	Prismatic = "prismatic",
+	Prismatisch = "prismatic",
+	Meta = "meta",
+}
+
+local gemColorCache = {}
+
+local function socketWordStem(global)
+	if not global or global == "" then return nil end
+	local word = string.match(global, "^(%S+)")
+	if not word then return nil end
+	word = string.lower(word)
+	-- "Roter"/"Blauer"/"Gelber" -> rot/blau/gelb; "Red" bleibt.
+	if #word > 4 and string.sub(word, -2) == "er" then
+		word = string.sub(word, 1, -3)
+	end
+	return word
+end
+
+local function gemColorFromTooltip(gemId)
+	local lines = Classify.Lines("item:" .. gemId)
+	if #lines == 0 then return nil end
+	local blob = ""
+	for index = 1, #lines do
+		blob = blob .. "\n" .. string.lower(lines[index].text)
+	end
+	local function mentioned(global)
+		local stem = socketWordStem(global)
+		return stem and string.find(blob, stem, 1, true)
+	end
+	local red = mentioned(EMPTY_SOCKET_RED)
+	local yellow = mentioned(EMPTY_SOCKET_YELLOW)
+	local blue = mentioned(EMPTY_SOCKET_BLUE)
+	local meta = mentioned(EMPTY_SOCKET_META) or string.find(blob, "meta", 1, true)
+	if meta and not red and not yellow and not blue then
+		return "meta"
+	end
+	if red and yellow and blue then return "prismatic" end
+	if red and yellow then return "orange" end
+	if red and blue then return "purple" end
+	if yellow and blue then return "green" end
+	if red then return "red" end
+	if yellow then return "yellow" end
+	if blue then return "blue" end
+	return nil
+end
+
+local function gemColor(gemId)
+	if not gemId or gemId <= 0 then return nil end
+	local cached = gemColorCache[gemId]
+	if cached ~= nil then
+		return cached ~= false and cached or nil
+	end
+	if Data.metaGems[gemId] then
+		gemColorCache[gemId] = "meta"
+		return "meta"
+	end
+	local name, _, _, _, _, _, subType, _, _, _, _, classID, subclassID = GetItemInfo(gemId)
+	if not name then
+		return nil
+	end
+	local color
+	if classID == 3 and subclassID and SUBCLASS_COLOR[subclassID] then
+		color = SUBCLASS_COLOR[subclassID]
+	elseif subType and SUBTYPE_COLOR[subType] then
+		color = SUBTYPE_COLOR[subType]
+	else
+		local refs = Data.gemColorRefs
+		if refs and subType then
+			for refColor, itemId in pairs(refs) do
+				if select(7, GetItemInfo(itemId)) == subType then
+					color = refColor
+					break
+				end
+			end
+		end
+	end
+	if not color then
+		color = gemColorFromTooltip(gemId)
+	end
+	if color then
+		gemColorCache[gemId] = color
+	else
+		gemColorCache[gemId] = false
+	end
+	return color
+end
+
+local function addGemColor(counts, color)
+	if color == "red" then
+		counts.red = counts.red + 1
+	elseif color == "yellow" then
+		counts.yellow = counts.yellow + 1
+	elseif color == "blue" then
+		counts.blue = counts.blue + 1
+	elseif color == "orange" then
+		counts.red = counts.red + 1
+		counts.yellow = counts.yellow + 1
+	elseif color == "purple" then
+		counts.red = counts.red + 1
+		counts.blue = counts.blue + 1
+	elseif color == "green" then
+		counts.yellow = counts.yellow + 1
+		counts.blue = counts.blue + 1
+	elseif color == "prismatic" then
+		counts.red = counts.red + 1
+		counts.yellow = counts.yellow + 1
+		counts.blue = counts.blue + 1
+	end
+end
+
+local function resolveGemId(link, parsed, gemIndex)
+	local gemId = parsed and parsed.gems[gemIndex] or 0
+	if not link then return gemId end
+	local _, gemLink = GetItemGem(link, gemIndex)
+	if gemLink then
+		local fromLink = tonumber(string.match(gemLink, "item:(%d+)"))
+		if fromLink and fromLink > 0 then
+			return fromLink
+		end
+	end
+	return gemId
+end
+
+local function countGemColors(unit)
+	local counts = { red = 0, yellow = 0, blue = 0 }
+	local unknown = 0
+	for index = 1, #Data.slots do
+		local slotId = Data.SlotId(Data.slots[index].key)
+		local link = GetInventoryItemLink(unit, slotId)
+		local parsed = Classify.ParseLink(link)
+		if parsed then
+			for gemIndex = 1, 4 do
+				local gemId = resolveGemId(link, parsed, gemIndex)
+				if gemId > 0 then
+					local color = gemColor(gemId)
+					if not color then
+						unknown = unknown + 1
+					elseif color ~= "meta" and color ~= "simple" then
+						addGemColor(counts, color)
+					end
+				end
+			end
+		end
+	end
+	return counts, unknown
+end
+
+local function metaRequirementMet(req, counts)
+	if not req then return nil end
+	if req.more then
+		local first = req.more[1]
+		local second = req.more[2]
+		return (counts[first] or 0) > (counts[second] or 0)
+	end
+	if (counts.red or 0) < (req.red or 0) then return false end
+	if (counts.yellow or 0) < (req.yellow or 0) then return false end
+	if (counts.blue or 0) < (req.blue or 0) then return false end
+	return true
+end
+
+local function isGrayLine(line)
+	local r, g, b = line.r, line.g, line.b
+	local maxc = math.max(r, g, b)
+	local minc = math.min(r, g, b)
+	return maxc < 0.6 and (maxc - minc) < 0.08
+end
+
+-- Fallback: Effektzeilen hinter dem Meta-Namen im Inventar-Tooltip.
+local function metaActiveFromTooltip(unit, slotId, gemId)
+	local gemName = GetItemInfo(gemId)
+	if not gemName then return nil end
+	local lines = Classify.InventoryLines(unit, slotId)
+	if #lines == 0 then
+		local link = GetInventoryItemLink(unit, slotId)
+		lines = Classify.Lines(link)
+	end
+	local startAt
+	for index = 1, #lines do
+		if string.find(lines[index].text, gemName, 1, true) then
+			startAt = index
+			break
+		end
+	end
+	if not startAt then return nil end
+	local saw, active = false, true
+	for index = startAt + 1, math.min(startAt + 4, #lines) do
+		local line = lines[index]
+		local text = line.text
+		if socketKind(text) or isSocketBonus(text) then
+			break
+		end
+		if string.find(text, "%+") or string.find(text, "%%") then
+			saw = true
+			if isGrayLine(line) then
+				active = false
+			end
+		elseif saw then
+			break
+		end
+	end
+	if not saw then return nil end
+	return active
+end
+
+local function metaResult(active, slotName)
+	return {
+		active = active,
+		slot = slotName,
+		summary = active and GearCheck:T("META_ACTIVE") or GearCheck:T("META_INACTIVE"),
+	}
+end
+
+local function metaStatus(unit)
+	for index = 1, #Data.slots do
+		local slot = Data.slots[index]
+		local slotId = Data.SlotId(slot.key)
+		local link = GetInventoryItemLink(unit, slotId)
+		local parsed = Classify.ParseLink(link)
+		if link and parsed then
+			for gemIndex = 1, 4 do
+				local gemId = resolveGemId(link, parsed, gemIndex)
+				if gemId > 0 then
+					local meta = Data.metaGems[gemId]
+					local color = gemColor(gemId)
+					if meta or color == "meta" then
+						if meta and meta.req then
+							local counts, unknown = countGemColors(unit)
+							local met = metaRequirementMet(meta.req, counts)
+							if met == true then
+								return metaResult(true, slot.name)
+							end
+							if met == false and unknown == 0 then
+								return metaResult(false, slot.name)
+							end
+						end
+						local active = metaActiveFromTooltip(unit, slotId, gemId)
+						if active ~= nil then
+							return metaResult(active, slot.name)
+						end
+						if meta and meta.req then
+							local counts, unknown = countGemColors(unit)
+							local met = metaRequirementMet(meta.req, counts)
+							if met == true then
+								return metaResult(true, slot.name)
+							end
+							if unknown == 0 then
+								return metaResult(false, slot.name)
+							end
+						end
+						return metaResult(false, slot.name)
+					end
+				end
+			end
+		end
+	end
+	return nil
+end
+
 function Classify.Unit(unit, context)
 	local issues = {}
 	if not unit or not context or context.role == "unknown" then
@@ -948,5 +1250,14 @@ function Classify.Unit(unit, context)
 			addIssue(issues, GearCheck:T("DEFENSE"), defense.issue)
 		end
 	end
-	return issues, note, defense
+
+	local meta
+	if not gemsIncomplete then
+		meta = metaStatus(unit)
+		if meta and not meta.active then
+			addIssue(issues, meta.slot, GearCheck:T("META_INACTIVE"))
+		end
+	end
+
+	return issues, note, defense, meta
 end

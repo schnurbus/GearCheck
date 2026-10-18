@@ -95,23 +95,39 @@ Data.statGlobals = {
 }
 
 -- Meta-Edelsteine, deren Effekt über den reinen Attributtext hinausgeht.
+-- req = Mindestanzahl je Farbe; more = { a, b } bedeutet Farbe a > Farbe b (TBC).
 Data.metaGems = {
-	[41285] = { damage = true, caster = true }, -- Chaotischer Polarlichtdiamant
-	[34220] = { damage = true, caster = true }, -- Chaotischer Himmelsfeuerdiamant
-	[41376] = { healer = true }, -- Belebender Polarlichtdiamant
-	[41333] = { caster = true, healer = true }, -- Glutpolarlichtdiamant
-	[41377] = { caster = true, healer = true }, -- Strahlender Polarlichtdiamant
-	[41380] = { tank = true }, -- Strenger Erdspalterdiamant
-	[41395] = { tank = true }, -- Stärkender Erdspalterdiamant
-	[41396] = { tank = true }, -- Ewiger Erdspalterdiamant
-	[41397] = { tank = true }, -- Mächtiger Erdspalterdiamant
-	[41401] = { caster = true, healer = true }, -- Bemerkenswerter Erdspalterdiamant
-	[41385] = { caster = true, healer = true }, -- Belebender Erdspalterdiamant
-	[41389] = { damage = true, caster = true, healer = true }, -- Strahlender Erdspalterdiamant
-	[41381] = { damage = true }, -- Beständiger Erdspalterdiamant
-	[41382] = { damage = true }, -- Energischer Erdspalterdiamant
-	[41398] = { damage = true }, -- Unerbittlicher Erdspalterdiamant
-	[41400] = { damage = true }, -- Donnernder Polarlichtdiamant
+	[41285] = { damage = true, caster = true, req = { blue = 2 } }, -- Chaotischer Polarlichtdiamant
+	[34220] = { damage = true, caster = true, req = { more = { "red", "yellow" } } }, -- Chaotischer Himmelsfeuerdiamant
+	[41376] = { healer = true, req = { red = 2 } }, -- Belebender Polarlichtdiamant
+	[41333] = { caster = true, healer = true, req = { red = 3 } }, -- Glutpolarlichtdiamant
+	[41377] = { caster = true, healer = true, req = { red = 1, blue = 2 } }, -- Strahlender Polarlichtdiamant (Effulgent)
+	[41380] = { tank = true, req = { red = 1, blue = 2 } }, -- Strenger Erdspalterdiamant (Austere)
+	[41395] = { tank = true, caster = true, healer = true, req = { red = 2, blue = 1 } }, -- Stärkender Erdspalterdiamant (Bracing)
+	[41396] = { tank = true, req = { red = 2, blue = 1 } }, -- Ewiger Erdspalterdiamant (Eternal)
+	[41397] = { tank = true, req = { blue = 3 } }, -- Mächtiger Erdspalterdiamant (Powerful)
+	[41401] = { caster = true, healer = true, req = { red = 1, yellow = 1, blue = 1 } }, -- Bemerkenswerter Erdspalterdiamant (Insightful)
+	[41385] = { caster = true, healer = true, req = { red = 1, blue = 2 } }, -- Belebender Erdspalterdiamant (Invigorating)
+	[41389] = { damage = true, caster = true, healer = true, req = { red = 2, yellow = 1 } }, -- Strahlender Erdspalterdiamant (Beaming)
+	[41381] = { damage = true, req = { yellow = 2, blue = 1 } }, -- Beständiger Erdspalterdiamant (Persistent)
+	[41382] = { damage = true, req = { red = 1, yellow = 1, blue = 1 } }, -- Energischer Erdspalterdiamant (Trenchant)
+	[41398] = { damage = true, req = { red = 1, yellow = 1, blue = 1 } }, -- Unerbittlicher Erdspalterdiamant (Relentless)
+	[41400] = { damage = true, req = { red = 1, yellow = 1, blue = 1 } }, -- Donnernder Polarlichtdiamant (Thundering)
+	[41307] = { damage = true, caster = true, req = { red = 1, yellow = 1, blue = 1 } }, -- Zerstörerischer Polarlichtdiamant
+	[41339] = { damage = true, req = { red = 1, yellow = 2 } }, -- Flüchtiger Polarlichtdiamant (Swift)
+	[41375] = { caster = true, healer = true, req = { red = 1, yellow = 1, blue = 1 } }, -- Unermüdlicher Polarlichtdiamant (Tireless)
+	[41335] = { damage = true, caster = true, req = { red = 2, yellow = 1 } }, -- Rätselhafter Polarlichtdiamant (Enigmatic)
+}
+
+-- Referenz-IDs für GetItemInfo-Subtypen (locale-unabhängig).
+Data.gemColorRefs = {
+	red = 40111, -- Fetter Scharlachrubin
+	yellow = 40124, -- Glatter Königsbernstein
+	blue = 40119, -- Solider Fürstenzirkon
+	orange = 40142, -- Gravierter Ametrin
+	purple = 40129, -- Stattlicher Schreckensstein
+	green = 40167, -- Robuster Auge von Zul
+	prismatic = 49110, -- Alptraumträne
 }
 
 -- Proc-Verzauberungen, deren Tooltip keine eindeutige Wertung trägt oder in die Irre führt.

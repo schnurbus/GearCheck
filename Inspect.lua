@@ -1018,6 +1018,22 @@ function InspectView:RenderPage()
 		else
 			local slotIssues = grouped[entry.name]
 			local issueText = slotIssues and table.concat(slotIssues, "\n") or ""
+			if entry.key == "HeadSlot" and record.meta and record.meta.summary then
+				local metaLine
+				if record.meta.active then
+					metaLine = "|cff1eff1e" .. record.meta.summary .. "|r"
+				else
+					metaLine = "|cffff3333" .. record.meta.summary .. "|r"
+				end
+				local inactiveText = GearCheck:T("META_INACTIVE")
+				if issueText == inactiveText then
+					issueText = metaLine
+				elseif issueText ~= "" then
+					issueText = metaLine .. "\n" .. string.gsub(issueText, inactiveText .. "\n?", "")
+				else
+					issueText = metaLine
+				end
+			end
 			used[entry.name] = true
 			widget.name:SetWidth(nameWidth)
 			widget.role:SetWidth(math.max(nameWidth - 36, 40))
@@ -1027,7 +1043,11 @@ function InspectView:RenderPage()
 			if issueText ~= "" then
 				issueHeight = widget.issues:GetStringHeight() or 0
 				if issueHeight < 1 then
-					issueHeight = #slotIssues * 12
+					local lines = 1
+					for _ in string.gmatch(issueText, "\n") do
+						lines = lines + 1
+					end
+					issueHeight = lines * 12
 				end
 			end
 			local height = issueHeight > 0 and (34 + issueHeight) or 36
@@ -1056,12 +1076,23 @@ function InspectView:RenderPage()
 
 	local findings = {}
 	if record and record.status == "done" then
+		if record.meta and record.meta.summary then
+			if record.meta.active then
+				findings[#findings + 1] = "|cff1eff1e" .. record.meta.summary .. "|r"
+			else
+				findings[#findings + 1] = "|cffff3333" .. record.meta.summary .. "|r"
+			end
+		end
 		if not record.issues or #record.issues == 0 then
-			findings[1] = "|cff1eff1e" .. GearCheck:T("NO_ISSUES") .. "|r"
+			if #findings == 0 then
+				findings[1] = "|cff1eff1e" .. GearCheck:T("NO_ISSUES") .. "|r"
+			end
 		else
 			for index = 1, #record.issues do
 				local issue = record.issues[index]
-				findings[#findings + 1] = "|cffff3333" .. issue.slot .. ":|r " .. issue.text
+				if not (record.meta and not record.meta.active and issue.text == GearCheck:T("META_INACTIVE")) then
+					findings[#findings + 1] = "|cffff3333" .. issue.slot .. ":|r " .. issue.text
+				end
 			end
 		end
 	end
