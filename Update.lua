@@ -3,16 +3,12 @@ local _, GearCheck = ...
 local Update = {}
 GearCheck.Update = Update
 
-local CHANNEL_NAME = "GearCheckVer"
 local ADDON_PREFIX = "GCVer"
-local PAYLOAD_PREFIX = "GCVer:"
 local BROADCAST_GAP = 90
 local RELEASE_URL = "https://github.com/schnurbus/GearCheck/releases"
 
-local channelId
 local lastBroadcast = 0
 local started = false
-local pendingJoinBroadcast = false
 local replied = {}
 
 local frame = CreateFrame("Frame")
@@ -48,13 +44,6 @@ local function isOwnSender(sender)
 	return name == UnitName("player")
 end
 
-local function payloadVersion(text)
-	if type(text) ~= "string" then return nil end
-	local version = text:match("^" .. PAYLOAD_PREFIX .. "(%d[%d%.]*)$")
-	if version and parseVersion(version) then return version end
-	return nil
-end
-
 local function notify(remoteVersion)
 	GearCheckDB = GearCheckDB or {}
 	local seen = GearCheckDB.updateNotified
@@ -81,27 +70,11 @@ local function handleRemote(sender, version)
 	end
 end
 
-local function hideChannel()
-	for i = 1, NUM_CHAT_WINDOWS do
-		local chatFrame = _G["ChatFrame" .. i]
-		if chatFrame then
-			ChatFrame_RemoveChannel(chatFrame, CHANNEL_NAME)
-		end
-	end
-end
+local function broadcast(force)
+	local now = GetTime()
+	if not force and (now - lastBroadcast) < BROADCAST_GAP then return end
+	lastBroadcast = now
 
-local function refreshChannelId()
-	local id = GetChannelName(CHANNEL_NAME)
-	if id and id > 0 then
-		channelId = id
-		hideChannel()
-		return true
-	end
-	channelId = nil
-	return false
-end
-
-local function broadcastAddon()
 	if IsInGuild() then
 		SendAddonMessage(ADDON_PREFIX, GearCheck.version, "GUILD")
 	end
@@ -112,51 +85,10 @@ local function broadcastAddon()
 	end
 end
 
-local function broadcastChannel()
-	if refreshChannelId() then
-		SendChatMessage(PAYLOAD_PREFIX .. GearCheck.version, "CHANNEL", nil, channelId)
-	end
-end
-
-local function broadcast(force)
-	local now = GetTime()
-	if not force and (now - lastBroadcast) < BROADCAST_GAP then return end
-	lastBroadcast = now
-	broadcastChannel()
-	broadcastAddon()
-end
-
-local function joinChannel()
-	if refreshChannelId() then
-		hideChannel()
-		broadcast(true)
-		return
-	end
-	pendingJoinBroadcast = true
-	JoinTemporaryChannel(CHANNEL_NAME)
-	lastBroadcast = GetTime()
-	broadcastAddon()
-end
-
 local function onEvent(self, event, ...)
 	if event == "PLAYER_ENTERING_WORLD" then
 		self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-		joinChannel()
-	elseif event == "CHANNEL_UI_UPDATE" then
-		if refreshChannelId() then
-			hideChannel()
-			if pendingJoinBroadcast then
-				pendingJoinBroadcast = false
-				broadcast(true)
-			end
-		end
-	elseif event == "CHAT_MSG_CHANNEL" then
-		local message, sender, _, _, _, _, _, _, channelName = ...
-		if strlower(channelName or "") ~= strlower(CHANNEL_NAME) then return end
-		local version = payloadVersion(message)
-		if version then
-			handleRemote(sender, version)
-		end
+		broadcast(true)
 	elseif event == "CHAT_MSG_ADDON" then
 		local prefix, message, _, sender = ...
 		if prefix ~= ADDON_PREFIX then return end
@@ -170,34 +102,11 @@ end
 
 frame:SetScript("OnEvent", onEvent)
 
-local function isVersionChannel(channelName)
-	return strlower(channelName or "") == strlower(CHANNEL_NAME)
-end
-
-local function filterChannelMessage(_, _, message, _, _, _, _, _, _, _, channelName)
-	if isVersionChannel(channelName) and payloadVersion(message) then
-		return true
-	end
-end
-
-local function filterChannelNotice(_, _, _, _, _, _, _, _, _, _, channelName)
-	if isVersionChannel(channelName) then
-		return true
-	end
-end
-
 function Update:Start()
 	if started then return end
 	started = true
 
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", filterChannelMessage)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", filterChannelNotice)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_JOIN", filterChannelNotice)
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_LEAVE", filterChannelNotice)
-
 	frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-	frame:RegisterEvent("CHANNEL_UI_UPDATE")
-	frame:RegisterEvent("CHAT_MSG_CHANNEL")
 	frame:RegisterEvent("CHAT_MSG_ADDON")
 	frame:RegisterEvent("PARTY_MEMBERS_CHANGED")
 	frame:RegisterEvent("RAID_ROSTER_UPDATE")
