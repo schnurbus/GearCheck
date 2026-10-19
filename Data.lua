@@ -131,6 +131,7 @@ Data.gemColorRefs = {
 }
 
 -- Proc-Verzauberungen, deren Tooltip keine eindeutige Wertung trägt oder in die Irre führt.
+-- defenseSkill ist rohe Verteidigung, keine Verteidigungswertung.
 Data.enchants = {
 	[3368] = { damage = true, tank = true }, -- Rune des gefallenen Kreuzfahrers
 	[3369] = { damage = true, caster = true }, -- Rune des schwarzen Gletschers
@@ -139,8 +140,8 @@ Data.enchants = {
 	[3594] = { tank = true }, -- Rune des Schwertzerbrechens
 	[3367] = { pvp = true }, -- Rune des Zauberbrechens
 	[3595] = { pvp = true }, -- Rune des Zauberzerbrechens
-	[3883] = { tank = true }, -- Rune des nerubischen Panzers
-	[3847] = { tank = true }, -- Rune des Steinhautgargoyles
+	[3883] = { tank = true, defenseSkill = 13 }, -- Rune des nerubischen Panzers
+	[3847] = { tank = true, defenseSkill = 25 }, -- Rune des Steinhautgargoyles
 	[2673] = { tank = true, damage = true, exclude = { DEATHKNIGHT = { tank = true } } }, -- Mungo
 	[3225] = { damage = true }, -- Henker
 	[3789] = { damage = true }, -- Berserker
@@ -163,7 +164,7 @@ Data.enchants = {
 	[3852] = { tank = true, resilience = 15 }, -- Große Inschrift des Gladiators
 }
 
--- Stufe 80 gegen Bosse der Stufe 83 (5,6 % Crit). Verteidigungswertung und Abhärtung rechnen zusammen.
+-- Stufe 80 gegen Bosse der Stufe 83 (5,6 % Crit). Verteidigungswertung, Verteidigung und Abhärtung rechnen zusammen.
 Data.critCap = {
 	bossCrit = 5.6,
 	baseDefense = 400,

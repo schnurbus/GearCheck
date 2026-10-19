@@ -668,6 +668,13 @@ local function enchantRatings(enchantId)
 	return defense, resilience
 end
 
+-- Runen erhöhen die Verteidigung direkt. GetItemStats liefert dafür keine Wertung.
+local function enchantDefenseSkill(enchantId)
+	local override = enchantId and Data.enchants[enchantId]
+	if not override then return 0 end
+	return override.defenseSkill or 0
+end
+
 -- Differenz aus vollem Link und Link ohne Verzauberung. Fehlt sie, kommt der Wert aus dem Tooltip.
 local function splitEnchantRatings(link, parsed)
 	if not parsed or parsed.enchant == 0 then
@@ -731,7 +738,7 @@ end
 
 local function tankDefense(unit, context, gemsIncomplete)
 	local cap = Data.critCap
-	local defenseRating, resilienceRating = 0, 0
+	local defenseRating, resilienceRating, defenseSkill = 0, 0, 0
 	for index = 1, #Data.slots do
 		local slotId = Data.SlotId(Data.slots[index].key)
 		local link = GetInventoryItemLink(unit, slotId)
@@ -743,6 +750,7 @@ local function tankDefense(unit, context, gemsIncomplete)
 			local enchantDefense, enchantResilience = splitEnchantRatings(link, parsed)
 			defenseRating = defenseRating + enchantDefense
 			resilienceRating = resilienceRating + enchantResilience
+			defenseSkill = defenseSkill + enchantDefenseSkill(parsed.enchant)
 		end
 	end
 
@@ -765,9 +773,10 @@ local function tankDefense(unit, context, gemsIncomplete)
 		end
 	end
 
-	local skill = math.floor(cap.baseDefense + defenseRating / cap.defenseRatingPerSkill)
+	local skillFromRating = defenseRating / cap.defenseRatingPerSkill
+	local skill = math.floor(cap.baseDefense + skillFromRating + defenseSkill)
 	local resilience = math.floor(resilienceRating + 0.5)
-	local fromDefense = (defenseRating / cap.defenseRatingPerSkill) * 0.04
+	local fromDefense = (skillFromRating + defenseSkill) * 0.04
 	local fromResilience = resilienceRating / cap.resilienceRatingPerPercent
 	local total = fromDefense + fromResilience + talentPercent
 	local covered = total >= cap.bossCrit - 1e-6
