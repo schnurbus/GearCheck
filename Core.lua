@@ -1,7 +1,7 @@
 local _, GearCheck = ...
 _G.GearCheck = GearCheck
 
-GearCheck.version = "1.0.0"
+GearCheck.version = GetAddOnMetadata("GearCheck", "Version") or "0.0.0"
 GearCheck.results = {}
 
 local events = CreateFrame("Frame")
@@ -11,6 +11,9 @@ events:SetScript("OnEvent", function(self, event, name)
 	GearCheckDB = GearCheckDB or {}
 	if GearCheck.UI then
 		GearCheck.UI:RestorePosition()
+	end
+	if GearCheck.Update then
+		GearCheck.Update:Start()
 	end
 	self:UnregisterEvent("ADDON_LOADED")
 end)

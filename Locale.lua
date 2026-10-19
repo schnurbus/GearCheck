@@ -113,6 +113,8 @@ local en = {
 	WHISPER_SENDING = "Sending %d message(s).",
 	WHISPER_DONE = "Whispers finished.",
 	WHISPER_ROLE = "Role %s.",
+
+	UPDATE_AVAILABLE = "New version available: %s (you have %s). %s",
 }
 
 local de = {
@@ -228,6 +230,8 @@ local de = {
 	WHISPER_SENDING = "Flüstere %d Nachricht(en).",
 	WHISPER_DONE = "Flüstern beendet.",
 	WHISPER_ROLE = "Rolle %s.",
+
+	UPDATE_AVAILABLE = "Neue Version verfügbar: %s (installiert: %s). %s",
 }
 
 local phrases = en
