@@ -126,12 +126,12 @@ Data.gemColorRefs = {
 	blue = 40119, -- Solider Fürstenzirkon
 	orange = 40142, -- Gravierter Ametrin
 	purple = 40129, -- Stattlicher Schreckensstein
-	green = 40167, -- Robuster Auge von Zul
+	green = 40167, -- Beständiges Auge von Zul
 	prismatic = 49110, -- Alptraumträne
 }
 
 -- Proc-Verzauberungen, deren Tooltip keine eindeutige Wertung trägt oder in die Irre führt.
--- defenseSkill ist rohe Verteidigung, keine Verteidigungswertung.
+-- defense ist Verteidigungswertung. defenseSkill ist rohe Verteidigung.
 Data.enchants = {
 	[3368] = { damage = true, tank = true }, -- Rune des gefallenen Kreuzfahrers
 	[3369] = { damage = true, caster = true }, -- Rune des schwarzen Gletschers
@@ -162,6 +162,8 @@ Data.enchants = {
 	[3870] = { tank = true }, -- Blutsauger
 	[3232] = { any = true }, -- Vitalität der Tuskarr
 	[3852] = { tank = true, resilience = 15 }, -- Große Inschrift des Gladiators
+	[3818] = { tank = true, defense = 20 }, -- Arkanum des stalwarten Beschützers
+	[1951] = { tank = true, defense = 16 }, -- Titanengewebe
 }
 
 -- Stufe 80 gegen Bosse der Stufe 83 (5,6 % Crit). Verteidigungswertung, Verteidigung und Abhärtung rechnen zusammen.

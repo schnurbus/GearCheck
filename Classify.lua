@@ -78,11 +78,25 @@ function Classify.ParseLink(link)
 	}
 end
 
-function Classify.GemCount(parsed)
+local function gemIdAt(link, parsed, gemIndex)
+	local gemId = parsed and parsed.gems and parsed.gems[gemIndex] or 0
+	if link and GetItemGem then
+		local _, gemLink = GetItemGem(link, gemIndex)
+		if gemLink then
+			local fromLink = tonumber(string.match(gemLink, "item:(%d+)"))
+			if fromLink and fromLink > 0 then
+				return fromLink
+			end
+		end
+	end
+	return gemId
+end
+
+function Classify.GemCount(parsed, link)
 	if not parsed then return 0 end
 	local count = 0
 	for index = 1, 4 do
-		if parsed.gems[index] > 0 then
+		if gemIdAt(link, parsed, index) > 0 then
 			count = count + 1
 		end
 	end
@@ -108,19 +122,95 @@ local function socketKind(text)
 	return nil
 end
 
+local function rawStat(raw, global)
+	if not global then return 0 end
+	local value = raw[global]
+	if value == nil and _G[global] then
+		value = raw[_G[global]]
+	end
+	if type(value) ~= "number" or value < 0 then return 0 end
+	return value
+end
+
+-- GetItemStats zählt die Sockel des Gegenstands, auch wenn ein Edelstein drin sitzt.
+local function apiSocketCounts(link)
+	local raw = {}
+	if link then
+		pcall(GetItemStats, link, raw)
+	end
+	local meta = rawStat(raw, "EMPTY_SOCKET_META")
+	local normal = rawStat(raw, "EMPTY_SOCKET_RED")
+		+ rawStat(raw, "EMPTY_SOCKET_YELLOW")
+		+ rawStat(raw, "EMPTY_SOCKET_BLUE")
+		+ rawStat(raw, "EMPTY_SOCKET_NO_COLOR")
+	return { meta = meta, normal = normal, total = meta + normal }
+end
+
 function Classify.SocketInfo(link)
+	local tipped = { meta = 0, normal = 0, total = 0 }
 	local lines = Classify.Lines(link)
-	if #lines == 0 then return nil end
-	local info = { meta = 0, normal = 0, total = 0 }
 	for index = 1, #lines do
 		local kind = socketKind(lines[index].text)
 		if kind == "meta" then
-			info.meta = info.meta + 1
+			tipped.meta = tipped.meta + 1
 		elseif kind == "normal" then
-			info.normal = info.normal + 1
+			tipped.normal = tipped.normal + 1
 		end
 	end
-	info.total = info.meta + info.normal
+	tipped.total = tipped.meta + tipped.normal
+
+	local api = apiSocketCounts(link)
+	local parsed = Classify.ParseLink(link)
+	local filled, metaFilled = 0, 0
+	if parsed then
+		for gemIndex = 1, 4 do
+			local gemId = gemIdAt(link, parsed, gemIndex)
+			if gemId > 0 then
+				filled = filled + 1
+				if Data.metaGems[gemId] then
+					metaFilled = metaFilled + 1
+				end
+			end
+		end
+	end
+
+	local info = { meta = 0, normal = 0, total = 0 }
+	if api.total > 0 then
+		local emptyTotal = api.total - filled
+		if emptyTotal < 0 then emptyTotal = 0 end
+		local emptyMeta = api.meta - metaFilled
+		if emptyMeta < 0 then emptyMeta = 0 end
+		-- Tooltip zeigt nur leere Sockel. Zeigt er mehr leere als übrig sind,
+		-- wurden gefasste Edelsteine nicht gezeichnet.
+		if tipped.total > 0 and tipped.total <= emptyTotal then
+			emptyMeta = tipped.meta
+			emptyTotal = tipped.total
+		elseif filled > 0 and tipped.meta == 0 then
+			emptyMeta = 0
+		end
+		if emptyMeta > emptyTotal then emptyMeta = emptyTotal end
+		info.meta = emptyMeta
+		info.normal = emptyTotal - emptyMeta
+		info.total = emptyTotal
+	else
+		info.meta = tipped.meta
+		info.normal = tipped.normal
+		info.total = tipped.total
+		if filled > 0 and info.total > 0 and filled >= info.total then
+			info.meta, info.normal, info.total = 0, 0, 0
+		elseif filled > 0 and info.total > filled then
+			local drop = filled
+			if info.meta > 0 and metaFilled > 0 then
+				local used = math.min(info.meta, metaFilled, drop)
+				info.meta = info.meta - used
+				drop = drop - used
+			end
+			info.normal = math.max(0, info.normal - drop)
+			info.total = info.meta + info.normal
+		end
+	end
+
+	if #lines == 0 and api.total == 0 then return nil end
 	return info
 end
 
@@ -147,7 +237,16 @@ local function statNeedles()
 	return needles
 end
 
-local function harvest(text, into)
+local function amountNear(text, startPos, stopPos)
+	local prefix = string.sub(text, math.max(1, startPos - 8), math.max(0, startPos - 1))
+	local before = tonumber(string.match(prefix, "(%d+)%s*$"))
+	if before then return before end
+	-- „Verteidigungswertung um 63“ und „defense rating by 63“: Zahl steht dahinter.
+	local suffix = string.sub(text, stopPos + 1, math.min(#text, stopPos + 16))
+	return tonumber(string.match(suffix, "^%s*[+:%a]*%s*(%d+)"))
+end
+
+local function harvest(text, into, requireAmount, prefixOnly)
 	if not text or text == "" then return end
 	text = string.lower(text)
 	local list = statNeedles()
@@ -155,9 +254,18 @@ local function harvest(text, into)
 		local entry = list[index]
 		local start, stop = string.find(text, entry.needle, 1, true)
 		if start then
-			local prefix = string.sub(text, math.max(1, start - 8), math.max(0, start - 1))
-			local amount = tonumber(string.match(prefix, "(%d+)%s*$")) or 1
-			into[entry.key] = (into[entry.key] or 0) + amount
+			local amount
+			if prefixOnly then
+				local prefix = string.sub(text, math.max(1, start - 8), math.max(0, start - 1))
+				amount = tonumber(string.match(prefix, "(%d+)%s*$"))
+			else
+				amount = amountNear(text, start, stop)
+			end
+			if amount then
+				into[entry.key] = (into[entry.key] or 0) + amount
+			elseif not requireAmount then
+				into[entry.key] = (into[entry.key] or 0) + 1
+			end
 			text = string.sub(text, 1, start - 1) .. string.sub(text, stop + 1)
 		end
 	end
@@ -180,6 +288,45 @@ local function isTriggeredLine(text)
 		return true
 	end
 	return false
+end
+
+local function isGreenLine(line)
+	return line.g > 0.85 and line.r < 0.25 and line.b < 0.25
+end
+
+-- Procs stehen auch hinter „Anlegen:“, tragen die Wertung aber nur zeitweise.
+local function isProcLine(text)
+	if not text then return false end
+	local lower = string.lower(text)
+	if string.find(lower, "chance", 1, true) then return true end
+	if string.find(lower, "%d+%s*sek") or string.find(lower, "%d+%s*sec") then return true end
+	return false
+end
+
+local function isEquipLine(text)
+	return ITEM_SPELL_TRIGGER_ONEQUIP and text and string.find(text, ITEM_SPELL_TRIGGER_ONEQUIP, 1, true)
+end
+
+-- Dauerhafte Anlegen-Zeilen wie „Erhöht die Verteidigungswertung um 63“.
+local function passiveEquipStats(link)
+	local stats = {}
+	local lines = Classify.Lines(link)
+	for index = 1, #lines do
+		local line = lines[index]
+		if isGreenLine(line) and isEquipLine(line.text) and not isProcLine(line.text) then
+			harvest(line.text, stats, true)
+		end
+	end
+	return stats
+end
+
+local function addEquipStats(stats, equip)
+	for key, amount in pairs(equip) do
+		local current = stats[key] or 0
+		if amount > current then
+			stats[key] = current + amount
+		end
+	end
 end
 
 local function readApiStats(link)
@@ -206,17 +353,19 @@ local function itemStats(link)
 	if not hasStats(stats) then
 		for index = 1, #lines do
 			local line = lines[index]
-			if line.g > 0.85 and line.r < 0.25 and line.b < 0.25 then
+			if isGreenLine(line) and not isProcLine(line.text) and not isEquipLine(line.text) then
 				harvest(line.text, stats)
 			end
 		end
 	else
 		for index = 1, #lines do
-			if isTriggeredLine(lines[index].text) then
-				harvest(lines[index].text, stats)
+			local text = lines[index].text
+			if isTriggeredLine(text) and not isEquipLine(text) and not isProcLine(text) then
+				harvest(text, stats, false, true)
 			end
 		end
 	end
+	addEquipStats(stats, passiveEquipStats(link))
 	return stats
 end
 
@@ -623,18 +772,19 @@ local function addSocketBonus(link, into)
 	end
 end
 
--- Dauerhafte Werte: Grundwerte, Edelsteine, Sockelbonus. Procs und Benutzen-Effekte zählen nicht.
+-- Dauerhafte Werte: Grundwerte, Anlegen-Wertungen, Edelsteine, Sockelbonus. Procs zählen nicht.
 local function passiveStats(link)
 	local stats = readApiStats(link)
 	if not hasStats(stats) then
 		local lines = Classify.Lines(link)
 		for index = 1, #lines do
 			local line = lines[index]
-			if line.g > 0.85 and line.r < 0.25 and line.b < 0.25 and not isTriggeredLine(line.text) and not isSocketBonus(line.text) then
+			if isGreenLine(line) and not isTriggeredLine(line.text) and not isProcLine(line.text) and not isSocketBonus(line.text) then
 				harvest(line.text, stats)
 			end
 		end
 	end
+	addEquipStats(stats, passiveEquipStats(link))
 	addSocketBonus(link, stats)
 	return stats
 end
@@ -673,6 +823,61 @@ local function enchantDefenseSkill(enchantId)
 	local override = enchantId and Data.enchants[enchantId]
 	if not override then return 0 end
 	return override.defenseSkill or 0
+end
+
+local function linkWithoutGems(link)
+	local stripped, count = string.gsub(link, "(|Hitem:%d+:%d*):%d*:%d*:%d*:%d*", "%1:0:0:0:0", 1)
+	if count == 0 then
+		stripped = string.gsub(link, "(item:%d+:%d*):%d*:%d*:%d*:%d*", "%1:0:0:0:0", 1)
+	end
+	return stripped
+end
+
+-- Mehrwert-Edelsteine wie „+10 Verteidigungswertung und +15 Ausdauer“ stehen in einer Zeile.
+-- GetItemStats am Gegenstand lässt die Verteidigung daraus weg.
+local function tooltipStats(link)
+	local stats = {}
+	local lines = Classify.Lines(link)
+	for index = 1, #lines do
+		local line = lines[index]
+		if not isSocketBonus(line.text) and not socketKind(line.text) then
+			harvest(line.text, stats)
+		end
+	end
+	return stats
+end
+
+local function gemStat(gemId, key)
+	local link = "item:" .. gemId
+	local api = readApiStats(link)
+	local tipped = tooltipStats(link)
+	return math.max(api[key] or 0, tipped[key] or 0)
+end
+
+-- Anteil, den GetItemStats am gefassten Gegenstand noch nicht enthält.
+local function missingGemRatings(link, parsed)
+	local defense, resilience = 0, 0
+	if parsed then
+		for gemIndex = 1, 4 do
+			local gemId = gemIdAt(link, parsed, gemIndex)
+			if gemId > 0 then
+				defense = defense + gemStat(gemId, "defense")
+				resilience = resilience + gemStat(gemId, "resilience")
+			end
+		end
+	end
+	local bare = linkWithoutEnchant(link)
+	local withGems = readApiStats(bare)
+	local withoutGems = readApiStats(linkWithoutGems(bare))
+	local apiDefense = (withGems.defense or 0) - (withoutGems.defense or 0)
+	local apiResilience = (withGems.resilience or 0) - (withoutGems.resilience or 0)
+	if apiDefense < 0 then apiDefense = 0 end
+	if apiResilience < 0 then apiResilience = 0 end
+	local extraDefense = defense - apiDefense
+	local extraResilience = resilience - apiResilience
+	if extraDefense < 0 then extraDefense = 0 end
+	if extraResilience < 0 then extraResilience = 0 end
+	return extraDefense, extraResilience, defense
 end
 
 -- Differenz aus vollem Link und Link ohne Verzauberung. Fehlt sie, kommt der Wert aus dem Tooltip.
@@ -750,6 +955,9 @@ local function tankDefense(unit, context, gemsIncomplete)
 			local enchantDefense, enchantResilience = splitEnchantRatings(link, parsed)
 			defenseRating = defenseRating + enchantDefense
 			resilienceRating = resilienceRating + enchantResilience
+			local gemDefense, gemResilience = missingGemRatings(link, parsed)
+			defenseRating = defenseRating + gemDefense
+			resilienceRating = resilienceRating + gemResilience
 			defenseSkill = defenseSkill + enchantDefenseSkill(parsed.enchant)
 		end
 	end
@@ -805,6 +1013,94 @@ local function tankDefense(unit, context, gemsIncomplete)
 		summary = defenseSummary(skill, resilience, talentRank, talentMax),
 		issue = GearCheck:T("CRIT_CAP", detail),
 	}
+end
+
+function Classify.DefenseDebug(unit)
+	if not unit or not UnitExists(unit) then
+		GearCheck:Print(GearCheck:T("DEBUG_NO_UNIT"))
+		return
+	end
+	local cap = Data.critCap
+	local totalPassive, totalEnchant, totalGems, totalSkill = 0, 0, 0, 0
+	GearCheck:Print(GearCheck:T("DEBUG_DEFENSE_FOR", UnitName(unit) or unit))
+	for index = 1, #Data.slots do
+		local slot = Data.slots[index]
+		local slotId = Data.SlotId(slot.key)
+		local link = GetInventoryItemLink(unit, slotId)
+		local parsed = Classify.ParseLink(link)
+		if link and parsed then
+			local bareLink = linkWithoutEnchant(link)
+			local bare = passiveStats(bareLink)
+			local apiFull = readApiStats(link)
+			local apiBare = readApiStats(bareLink)
+			local socket = {}
+			addSocketBonus(bareLink, socket)
+			local equip = passiveEquipStats(bareLink)
+			local gemIds = {}
+			for gemIndex = 1, 4 do
+				local gemId = gemIdAt(link, parsed, gemIndex)
+				if gemId > 0 then
+					gemIds[#gemIds + 1] = tostring(gemId)
+				end
+			end
+			local gemText = #gemIds > 0 and table.concat(gemIds, "+") or "-"
+			local defenseDelta = (apiFull.defense or 0) - (apiBare.defense or 0)
+			if defenseDelta < 0 then defenseDelta = 0 end
+			local enchantDefense, _, fromApi = splitEnchantRatings(link, parsed)
+			local gemExtra, _, gemDefense = missingGemRatings(link, parsed)
+			local skill = enchantDefenseSkill(parsed.enchant)
+			local passive = bare.defense or 0
+			local enchantText = "-"
+			if parsed.enchant > 0 then
+				if fromApi then
+					enchantText = GearCheck:T("DEBUG_DEFENSE_ENCHANT_API", parsed.enchant, defenseDelta, enchantDefense)
+				else
+					local tipped = enchantTooltipStats(parsed.enchant)
+					local override = Data.enchants[parsed.enchant]
+					enchantText = GearCheck:T(
+						"DEBUG_DEFENSE_ENCHANT_FALLBACK",
+						parsed.enchant,
+						tipped and tipped.defense or 0,
+						override and override.defense or 0,
+						enchantDefense
+					)
+				end
+			end
+			if passive > 0 or parsed.enchant > 0 or skill > 0 or gemDefense > 0 or gemText ~= "-" then
+				local itemName = string.match(link, "%[(.-)%]") or "?"
+				GearCheck:Print(GearCheck:T(
+					"DEBUG_DEFENSE_SLOT",
+					slot.name,
+					itemName,
+					passive,
+					apiBare.defense or 0,
+					socket.defense or 0,
+					equip.defense or 0,
+					gemDefense,
+					gemExtra,
+					gemText,
+					enchantText,
+					skill
+				))
+			end
+			totalPassive = totalPassive + passive
+			totalEnchant = totalEnchant + enchantDefense
+			totalGems = totalGems + gemExtra
+			totalSkill = totalSkill + skill
+		end
+	end
+	local rating = totalPassive + totalEnchant + totalGems
+	local skill = math.floor(cap.baseDefense + rating / cap.defenseRatingPerSkill + totalSkill)
+	GearCheck:Print(GearCheck:T("DEBUG_DEFENSE_SUM", totalPassive, totalEnchant, totalGems, rating, totalSkill, skill))
+	if UnitIsUnit(unit, "player") then
+		local base, modifier = UnitDefense("player")
+		local ratingId = CR_DEFENSE_SKILL or 2
+		local combat = GetCombatRating(ratingId) or 0
+		local bonus = GetCombatRatingBonus(ratingId) or 0
+		local sheet = (base or 0) + (modifier or 0)
+		GearCheck:Print(GearCheck:T("DEBUG_DEFENSE_SHEET", sheet, base or 0, modifier or 0, combat, bonus))
+		GearCheck:Print(GearCheck:T("DEBUG_DEFENSE_GAP", combat - rating, sheet - skill))
+	end
 end
 
 local function enchantMismatch(enchantId, classToken, role)
@@ -982,19 +1278,6 @@ local function addGemColor(counts, color)
 	end
 end
 
-local function resolveGemId(link, parsed, gemIndex)
-	local gemId = parsed and parsed.gems[gemIndex] or 0
-	if not link then return gemId end
-	local _, gemLink = GetItemGem(link, gemIndex)
-	if gemLink then
-		local fromLink = tonumber(string.match(gemLink, "item:(%d+)"))
-		if fromLink and fromLink > 0 then
-			return fromLink
-		end
-	end
-	return gemId
-end
-
 local function countGemColors(unit)
 	local counts = { red = 0, yellow = 0, blue = 0 }
 	local unknown = 0
@@ -1004,7 +1287,7 @@ local function countGemColors(unit)
 		local parsed = Classify.ParseLink(link)
 		if parsed then
 			for gemIndex = 1, 4 do
-				local gemId = resolveGemId(link, parsed, gemIndex)
+				local gemId = gemIdAt(link, parsed, gemIndex)
 				if gemId > 0 then
 					local color = gemColor(gemId)
 					if not color then
@@ -1092,7 +1375,7 @@ local function metaStatus(unit)
 		local parsed = Classify.ParseLink(link)
 		if link and parsed then
 			for gemIndex = 1, 4 do
-				local gemId = resolveGemId(link, parsed, gemIndex)
+				local gemId = gemIdAt(link, parsed, gemIndex)
 				if gemId > 0 then
 					local meta = Data.metaGems[gemId]
 					local color = gemColor(gemId)
@@ -1160,7 +1443,7 @@ function Classify.Unit(unit, context)
 				end
 			end
 
-			local filled = Classify.GemCount(parsed)
+			local filled = Classify.GemCount(parsed, link)
 			gemsFound = gemsFound + filled
 			if strict then
 				local sockets = Classify.SocketInfo(link)
@@ -1195,7 +1478,7 @@ function Classify.Unit(unit, context)
 			end
 
 			for gemIndex = 1, 4 do
-				local gemId = parsed.gems[gemIndex]
+				local gemId = gemIdAt(link, parsed, gemIndex)
 				if gemId > 0 then
 					local _, gemLink = GetItemGem(link, gemIndex)
 					if not gemLink then

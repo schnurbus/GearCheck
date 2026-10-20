@@ -93,6 +93,8 @@ SlashCmdList["GEARCHECK"] = function(message)
 		GearCheck.Scan:ScanGroup()
 	elseif message == "whisper" or message == "fluestern" or message == "flüstern" then
 		GearCheck.Whisper:Confirm()
+	elseif message == "debug" or message == "defense" or message == "verteidigung" then
+		GearCheck.Classify.DefenseDebug("player")
 	else
 		GearCheck:Print(GearCheck:T("HELP"))
 	end

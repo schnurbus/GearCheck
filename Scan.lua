@@ -221,7 +221,7 @@ function Scan:NeedsGemWait(record)
 		local slot = GearCheck.Data.slots[index]
 		local link = GetInventoryItemLink(unit, GearCheck.Data.SlotId(slot.key))
 		local parsed = GearCheck.Classify.ParseLink(link)
-		if parsed and GearCheck.Classify.GemCount(parsed) == 0 then
+		if parsed and GearCheck.Classify.GemCount(parsed, link) == 0 then
 			local info = GearCheck.Classify.SocketInfo(link)
 			if info and info.total > 0 then
 				return true
