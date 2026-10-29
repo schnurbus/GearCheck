@@ -1413,6 +1413,76 @@ local function metaStatus(unit)
 	return nil
 end
 
+local PRISMATIC_STATS = { "strength", "agility", "stamina", "intellect", "spirit" }
+
+local function budgetAmount(stats, keys)
+	local amount = 0
+	for index = 1, #keys do
+		local value = stats[keys[index]] or 0
+		if value > amount then
+			amount = value
+		end
+	end
+	return amount
+end
+
+local function budgetShare(stats, budget)
+	if not budget then return nil end
+	local share, matched = 0, false
+	for index = 1, #budget do
+		local entry = budget[index]
+		local amount = budgetAmount(stats, entry.keys)
+		if amount > 0 and entry.cap and entry.cap > 0 then
+			share = share + amount / entry.cap
+			matched = true
+		end
+	end
+	if not matched then return nil end
+	return share
+end
+
+local function isAllStatGem(stats)
+	for index = 1, #PRISMATIC_STATS do
+		if (stats[PRISMATIC_STATS[index]] or 0) <= 0 then
+			return false
+		end
+	end
+	return true
+end
+
+-- Kleiner als die höchste Fassung: epische Werte, darüber Drachenaugen.
+-- Prismatisch zählt die Alptraumträne. Metas ohne Wertung (nur Effekt) bleiben,
+-- solange ihre Gegenstandsstufe die volle Fassung ist.
+local function gemIsSmall(gemLink, gemId)
+	local stats = itemStats(gemLink)
+	local meta = Data.metaGems[gemId] ~= nil or gemColor(gemId) == "meta"
+	if meta then
+		local itemLevel = select(4, GetItemInfo(gemLink))
+		if itemLevel and itemLevel < 80 then
+			return true
+		end
+		if not hasStats(stats) then
+			return false
+		end
+		local share = budgetShare(stats, Data.metaGemBudget)
+		return share ~= nil and share < 1
+	end
+	if not hasStats(stats) then
+		return false
+	end
+	if isAllStatGem(stats) then
+		local full = Data.prismaticAllStat or 10
+		for index = 1, #PRISMATIC_STATS do
+			if stats[PRISMATIC_STATS[index]] < full then
+				return true
+			end
+		end
+		return false
+	end
+	local share = budgetShare(stats, Data.gemBudget)
+	return share ~= nil and share < 1
+end
+
 function Classify.Unit(unit, context)
 	local issues = {}
 	if not unit or not context or context.role == "unknown" then
@@ -1494,6 +1564,13 @@ function Classify.Unit(unit, context)
 						local reason = mismatch(itemStats(gemLink), context.class, context.role)
 						if reason then
 							addIssue(issues, slot.name, mismatchText("gem", reason, name))
+						end
+					end
+					if strict and gemIsSmall(gemLink, gemId) then
+						if name then
+							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL", name))
+						else
+							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL_UNNAMED"))
 						end
 					end
 				end

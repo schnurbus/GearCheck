@@ -130,6 +130,49 @@ Data.gemColorRefs = {
 	prismatic = 49110, -- Alptraumträne
 }
 
+-- Volle epische Fassung (3.3.5). Ein Stein ist maximal, wenn die Summe aus
+-- Wert geteilt durch Obergrenze mindestens 1 ergibt. Drachenaugen liegen darüber.
+-- Dieselbe Wertung zählt nur einmal, auch wenn die API sie mehrfach liefert.
+Data.gemBudget = {
+	{ cap = 20, keys = { "strength" } },
+	{ cap = 20, keys = { "agility" } },
+	{ cap = 20, keys = { "intellect" } },
+	{ cap = 20, keys = { "spirit" } },
+	{ cap = 30, keys = { "stamina" } },
+	{ cap = 23, keys = { "spellPower", "spellDamage", "healing" } },
+	{ cap = 40, keys = { "attackPower", "meleeAP", "rangedAP" } },
+	{ cap = 20, keys = { "armorPen" } },
+	{ cap = 20, keys = { "hit", "spellHit", "meleeHit", "rangedHit" } },
+	{ cap = 20, keys = { "crit", "spellCrit", "meleeCrit", "rangedCrit" } },
+	{ cap = 20, keys = { "haste", "spellHaste" } },
+	{ cap = 20, keys = { "expertise" } },
+	{ cap = 20, keys = { "defense" } },
+	{ cap = 20, keys = { "dodge" } },
+	{ cap = 20, keys = { "parry" } },
+	{ cap = 20, keys = { "block" } },
+	{ cap = 20, keys = { "resilience" } },
+	{ cap = 10, keys = { "mp5" } },
+	{ cap = 25, keys = { "spellPen" } },
+}
+
+-- Untergrenze der vollen Polarlicht- und Erdspalterdiamanten.
+-- Schwächere Metas und TBC-Diamanten liegen darunter.
+Data.metaGemBudget = {
+	{ cap = 21, keys = { "crit", "spellCrit", "meleeCrit", "rangedCrit" } },
+	{ cap = 42, keys = { "attackPower", "meleeAP", "rangedAP" } },
+	{ cap = 32, keys = { "stamina" } },
+	{ cap = 25, keys = { "spellPower", "spellDamage", "healing" } },
+	{ cap = 8, keys = { "mp5" } },
+	{ cap = 21, keys = { "defense" } },
+	{ cap = 21, keys = { "intellect" } },
+	{ cap = 21, keys = { "agility" } },
+	{ cap = 21, keys = { "strength" } },
+	{ cap = 21, keys = { "spirit" } },
+}
+
+-- Alptraumträne. Verzauberte Träne und Verzauberte Perle liegen darunter.
+Data.prismaticAllStat = 10
+
 -- Proc-Verzauberungen, deren Tooltip keine eindeutige Wertung trägt oder in die Irre führt.
 -- defense ist Verteidigungswertung. defenseSkill ist rohe Verteidigung.
 Data.enchants = {

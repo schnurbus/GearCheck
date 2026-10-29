@@ -48,7 +48,7 @@ Befunde können sein:
 
 - Gegenstand, Edelstein, Verzauberung oder Relikt passt nicht zur Rolle, oder stammt aus dem PvP.
 - Meta-Edelstein passt nicht zur Rolle.
-- Ab Stufe 80: leere Sockel, fehlende Verzauberung, fehlende Gürtelschnalle.
+- Ab Stufe 80: leere Sockel, Edelsteine unter der höchsten Fassung, fehlende Verzauberung, fehlende Gürtelschnalle. Drachenaugen und die Alptraumträne gelten als höchste Fassung.
 - Krieger- und Paladin-Tanks ohne Schild.
 - Jäger ohne Fernkampfwaffe.
 - Stufe-80-Tanks ohne Crit-Immunität. In den Details steht die Verteidigung; Abhärtung zählt mit, auch die Große Inschrift des Gladiators auf den Schultern. Die Runen des Steinhautgargoyles und des nerubischen Panzers zählen als Verteidigung, nicht als Wertung. Bären sind mit Überleben des Stärkeren 3/3 immun.
@@ -61,7 +61,7 @@ Fehlende Verzauberungen gelten für Kopf, Schulter, Umhang, Brust, Handgelenke, 
 
 ## Hinweise
 
-- Leere Sockel und fehlende Verzauberungen werden erst ab Stufe 80 gemeldet. Falsche Edelsteine und Verzauberungen gelten auf jeder Stufe.
+- Leere Sockel, kleinere Edelsteine und fehlende Verzauberungen werden erst ab Stufe 80 gemeldet. Falsche Edelsteine und Verzauberungen gelten auf jeder Stufe.
 - Manche Item-Links enthalten die Edelsteine erst nach kurzer Wartezeit. GearCheck wartet darauf. Bleiben alle Sockel leer, erscheint ein Hinweis, dass die Daten vom Server fehlen können.
 - Die Liste zeigt höchstens 40 Spieler.
 - Die Bewertung folgt festen Wertungsregeln für Tank, physischen Schaden, Zauberer und Heiler. Hybrid-Ausrüstung kann deshalb gelb oder rot markiert werden, auch wenn sie absichtlich gemischt ist.
