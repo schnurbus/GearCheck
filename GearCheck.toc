@@ -3,7 +3,7 @@
 ## Notes: Checks spec, gear, sockets and enchants for your target or group.
 ## Notes-deDE: Prüft Skillung, Ausrüstung, Sockel und Verzauberungen von Ziel und Gruppe.
 ## Author: Hogareth
-## Version: 1.3.3
+## Version: 1.3.4
 ## SavedVariables: GearCheckDB
 ## OptionalDeps: GearScore, GearScoreLite
 
