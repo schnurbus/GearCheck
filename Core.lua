@@ -18,6 +18,22 @@ events:SetScript("OnEvent", function(self, event, name)
 	self:UnregisterEvent("ADDON_LOADED")
 end)
 
+-- Zählt Loot-Befunde (Sockel, Verzauberungen) und Hinweise (Rolle, PvP, Verteidigung) getrennt.
+function GearCheck:CountIssues(record)
+	local loot, hints = 0, 0
+	local issues = record and record.issues
+	if issues then
+		for index = 1, #issues do
+			if issues[index].loot then
+				loot = loot + 1
+			else
+				hints = hints + 1
+			end
+		end
+	end
+	return loot, hints
+end
+
 function GearCheck:Print(message)
 	DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99GearCheck|r: " .. tostring(message))
 end

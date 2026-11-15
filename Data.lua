@@ -10,13 +10,13 @@ Data.slots = {
 	{ key = "ShoulderSlot", name = GearCheck:T("SLOT_SHOULDER"), enchant = "always" },
 	{ key = "BackSlot", name = GearCheck:T("SLOT_BACK"), enchant = "always" },
 	{ key = "ChestSlot", name = GearCheck:T("SLOT_CHEST"), enchant = "always" },
-	{ key = "WristSlot", name = GearCheck:T("SLOT_WRIST"), enchant = "always" },
-	{ key = "HandsSlot", name = GearCheck:T("SLOT_HANDS"), enchant = "always" },
+	{ key = "WristSlot", name = GearCheck:T("SLOT_WRIST"), enchant = "always", smithSocket = true },
+	{ key = "HandsSlot", name = GearCheck:T("SLOT_HANDS"), enchant = "always", smithSocket = true },
 	{ key = "WaistSlot", name = GearCheck:T("SLOT_WAIST"), buckle = true },
 	{ key = "LegsSlot", name = GearCheck:T("SLOT_LEGS"), enchant = "always" },
 	{ key = "FeetSlot", name = GearCheck:T("SLOT_FEET"), enchant = "always" },
-	{ key = "Finger0Slot", name = GearCheck:T("SLOT_FINGER0") },
-	{ key = "Finger1Slot", name = GearCheck:T("SLOT_FINGER1") },
+	{ key = "Finger0Slot", name = GearCheck:T("SLOT_FINGER0"), ring = true },
+	{ key = "Finger1Slot", name = GearCheck:T("SLOT_FINGER1"), ring = true },
 	{ key = "Trinket0Slot", name = GearCheck:T("SLOT_TRINKET0") },
 	{ key = "Trinket1Slot", name = GearCheck:T("SLOT_TRINKET1") },
 	{ key = "MainHandSlot", name = GearCheck:T("SLOT_MAINHAND"), enchant = "always" },
@@ -207,6 +207,130 @@ Data.enchants = {
 	[3852] = { tank = true, resilience = 15 }, -- Große Inschrift des Gladiators
 	[3818] = { tank = true, defense = 20 }, -- Arkanum des stalwarten Beschützers
 	[1951] = { tank = true, defense = 16 }, -- Titanengewebe
+}
+
+-- Volle Fassung je Slot (3.3.5). Eine Verzauberung ist kleiner, wenn eines
+-- dieser Profile sie in jedem gemeinsamen Wert übertrifft.
+-- Berufsverzauberungen liegen darüber und gelten damit auch.
+-- Waffen unterscheiden Einhand und Zweihand; Schilde und Fernkampf extra.
+local rings = {
+	{ attackPower = 40 },
+	{ spellPower = 23 },
+	{ stamina = 30 },
+}
+Data.enchantMax = {
+	HeadSlot = {
+		{ attackPower = 50, crit = 20 }, -- Arkanum der Qual
+		{ attackPower = 50, resilience = 20 }, -- Arkanum des Triumphs
+		{ spellPower = 30, crit = 20 }, -- Arkanum der brennenden Mysterien
+		{ spellPower = 30, mp5 = 10 }, -- Arkanum der glückseligen Besserung
+		{ spellPower = 29, resilience = 20 }, -- Arkanum der Vorherrschaft
+		{ stamina = 37, defense = 20 }, -- Arkanum des stalwarten Beschützers
+		{ stamina = 30, resilience = 25 }, -- Arkanum des wilden Gladiators
+	},
+	ShoulderSlot = {
+		{ attackPower = 40, crit = 15 }, -- Große Inschrift der Axt
+		{ spellPower = 24, crit = 15 }, -- Große Inschrift des Sturms
+		{ spellPower = 24, mp5 = 8 }, -- Große Inschrift der Klippe
+		{ dodge = 20, defense = 15 }, -- Große Inschrift des Turms
+		{ attackPower = 40, resilience = 15 }, -- Inschrift des Triumphs
+		{ spellPower = 23, resilience = 15 }, -- Inschrift der Vorherrschaft
+		{ stamina = 30, resilience = 15 }, -- Große Inschrift des Gladiators
+	},
+	BackSlot = {
+		{ agility = 22 },
+		{ haste = 23 },
+		{ armor = 225 },
+		{ spellPen = 35 },
+		{ defense = 16 },
+		{ spirit = 10 },
+	},
+	ChestSlot = {
+		{ strength = 10, agility = 10, stamina = 10, intellect = 10, spirit = 10 },
+		{ health = 275 },
+		{ defense = 22 },
+		{ resilience = 20 },
+		{ mp5 = 10 },
+		{ mana = 250 },
+	},
+	WristSlot = {
+		{ attackPower = 50 },
+		{ spellPower = 30 },
+		{ stamina = 40 },
+		{ intellect = 16 },
+		{ expertise = 15 },
+		{ spirit = 18 },
+		{ strength = 6, agility = 6, stamina = 6, intellect = 6, spirit = 6 },
+	},
+	HandsSlot = {
+		{ attackPower = 44 },
+		{ agility = 20 },
+		{ spellPower = 28 },
+		{ hit = 20 },
+		{ expertise = 15 },
+		{ parry = 10 },
+	},
+	LegsSlot = {
+		{ attackPower = 75, crit = 22 },
+		{ agility = 22, stamina = 55 },
+		{ spellPower = 50, spirit = 20 },
+		{ spellPower = 50, stamina = 30 },
+		{ resilience = 40, stamina = 28 },
+	},
+	FeetSlot = {
+		{ attackPower = 32 },
+		{ agility = 16 },
+		{ stamina = 22 },
+		{ spirit = 18 },
+		{ hit = 12, crit = 12 },
+		{ mp5 = 7 },
+	},
+	Finger0Slot = rings,
+	Finger1Slot = rings,
+	weapon1h = {
+		{ attackPower = 65 },
+		{ spellPower = 63 },
+		{ agility = 26 },
+		{ spirit = 45 },
+		{ hit = 25, crit = 25 },
+		{ hit = 28 },
+		{ defenseSkill = 13 },
+	},
+	weapon2h = {
+		{ attackPower = 110 },
+		{ spellPower = 81 },
+		{ agility = 35 },
+		{ defenseSkill = 25 },
+	},
+	shield = {
+		{ defense = 20 },
+		{ intellect = 25 },
+		{ blockValue = 81 },
+	},
+	ranged = {
+		{ crit = 40 },
+		{ haste = 40 },
+	},
+}
+
+-- Drachenaugen (nur Juweliere, höchstens drei). Englische Namen, IDs aus 3.3.5.
+Data.dragonEyes = {
+	[42142] = true, -- Bold Dragon's Eye
+	[42143] = true, -- Delicate Dragon's Eye
+	[42144] = true, -- Runed Dragon's Eye
+	[42145] = true, -- Sparkling Dragon's Eye
+	[42146] = true, -- Lustrous Dragon's Eye
+	[42148] = true, -- Brilliant Dragon's Eye
+	[42149] = true, -- Smooth Dragon's Eye
+	[42150] = true, -- Quick Dragon's Eye
+	[42151] = true, -- Subtle Dragon's Eye
+	[42152] = true, -- Flashing Dragon's Eye
+	[42153] = true, -- Fractured Dragon's Eye
+	[42154] = true, -- Precise Dragon's Eye
+	[42155] = true, -- Stormy Dragon's Eye
+	[42156] = true, -- Rigid Dragon's Eye
+	[42157] = true, -- Solid Dragon's Eye
+	[42158] = true, -- Mystic Dragon's Eye
 }
 
 -- Stufe 80 gegen Bosse der Stufe 83 (5,6 % Crit). Verteidigungswertung, Verteidigung und Abhärtung rechnen zusammen.

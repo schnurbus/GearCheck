@@ -182,19 +182,20 @@ function Scan:ApplyResult(record, unit, spec)
 	end
 	record.defense = nil
 	record.meta = nil
+	-- Sockel und Verzauberungen hängen nicht an der Rolle; sie werden immer geprüft.
+	local issues, note, defense, meta = GearCheck.Classify.Unit(unit, {
+		role = spec.role,
+		class = record.class,
+		level = record.level,
+	})
+	record.issues = issues or {}
+	record.defense = defense
+	record.meta = meta
 	if spec.role == "unknown" then
-		record.issues = {}
-		record.note = GearCheck:T("SPEC_UNCLEAR")
+		local unclear = GearCheck:T("SPEC_UNCLEAR")
+		record.note = note and (unclear .. "\n" .. note) or unclear
 	else
-		local issues, note, defense, meta = GearCheck.Classify.Unit(unit, {
-			role = spec.role,
-			class = record.class,
-			level = record.level,
-		})
-		record.issues = issues or {}
 		record.note = note
-		record.defense = defense
-		record.meta = meta
 	end
 	self:UpdateUI()
 end
@@ -342,7 +343,14 @@ function Scan:Tick()
 		if self.active.phase == "talent" and GetTime() > self.active.deadline then
 			self:FailActive(GearCheck:T("INSPECT_FAILED"))
 		elseif self.active.phase == "gems" then
-			if not self:Resolve(self.active.record) then
+			local record = self.active.record
+			if self.lastGuid and record.guid and self.lastGuid ~= record.guid then
+				-- Ein anderes NotifyInspect hat das Ziel gewechselt; die Edelsteindaten fehlen dann.
+				record.status = "pending"
+				table.insert(self.queue, 1, record)
+				self:ClearWatch()
+				self:UpdateUI()
+			elseif not self:Resolve(record) then
 				self:FailActive(GearCheck:T("LEFT_RANGE"))
 			elseif GetTime() >= self.active.deadline or not self:NeedsGemWait(self.active.record) then
 				self:FinishActive()
@@ -407,7 +415,7 @@ function Scan:Complete()
 		local record = GearCheck.results[index]
 		if record.status == "done" then
 			checked = checked + 1
-			if record.issues and #record.issues > 0 then
+			if GearCheck:CountIssues(record) > 0 then
 				problems = problems + 1
 			end
 		else

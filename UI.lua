@@ -214,7 +214,7 @@ whisperOneButton:SetPoint("LEFT", groupButton, "RIGHT", 8, 0)
 whisperOneButton:SetScript("OnClick", function()
 	local record = findRecord(UI.selectedKey)
 	if record then
-		GearCheck.Whisper:SendOne(record)
+		GearCheck.Whisper:ConfirmOne(record)
 	end
 end)
 UI.whisperOneButton = whisperOneButton
@@ -244,14 +244,18 @@ local function rowInfo(record)
 	if record.status ~= "done" then
 		return record.statusText or GearCheck:T("NOT_INSPECTABLE")
 	end
-	if record.role == "unknown" then
-		return GearCheck:T("ROLE_UNKNOWN")
+	local loot, hints = GearCheck:CountIssues(record)
+	local role = record.roleLabel or GearCheck:T("ROLE_UNKNOWN")
+	local text
+	if loot > 0 then
+		text = string.format("%s |cffff8080%s|r", role, GearCheck:T("LOOT_NO_SHORT", loot))
+	else
+		text = string.format("%s |cff80ff80%s|r", role, GearCheck:T("LOOT_OK_SHORT"))
 	end
-	local count = record.issues and #record.issues or 0
-	if count > 0 then
-		return string.format("%s |cffff8080%d|r", record.roleLabel or "", count)
+	if hints > 0 then
+		text = text .. string.format(" |cffffff80+%d|r", hints)
 	end
-	return (record.roleLabel or "") .. " |cff80ff80OK|r"
+	return text
 end
 
 local function averageLevel(gear)
@@ -376,19 +380,28 @@ function UI:IssuesText(record, showMeta)
 			lines[#lines + 1] = "|cffff3333" .. record.meta.summary .. "|r"
 		end
 	end
-	local issues = record.issues
-	if issues then
-		local inactiveText = GearCheck:T("META_INACTIVE")
+	local issues = record.issues or {}
+	local inactiveText = GearCheck:T("META_INACTIVE")
+	local loot, hints = GearCheck:CountIssues(record)
+	if loot > 0 then
+		lines[#lines + 1] = "|cffff3333" .. GearCheck:T("SECTION_LOOT") .. "|r"
+	else
+		lines[#lines + 1] = "|cff1eff1e" .. GearCheck:T("LOOT_OK") .. "|r"
+	end
+	-- Erst die Loot-Befunde (rot), dann die Hinweise (gelb).
+	for pass = 1, 2 do
+		local wantLoot = pass == 1
+		if not wantLoot and hints > 0 then
+			lines[#lines + 1] = "|cffffff80" .. GearCheck:T("SECTION_HINTS") .. "|r"
+		end
 		for index = 1, #issues do
 			local issue = issues[index]
 			local skip = showMeta and record.meta and not record.meta.active and issue.text == inactiveText
-			if not skip then
-				lines[#lines + 1] = "|cffff3333" .. issue.slot .. ":|r " .. issue.text
+			if not skip and (issue.loot and true or false) == wantLoot then
+				local color = wantLoot and "|cffff3333" or "|cffffff80"
+				lines[#lines + 1] = "  " .. color .. issue.slot .. ":|r " .. issue.text
 			end
 		end
-	end
-	if #lines == 0 then
-		return "|cff1eff1e" .. GearCheck:T("NO_ISSUES") .. "|r"
 	end
 	return table.concat(lines, "\n")
 end
@@ -525,6 +538,8 @@ function UI:Toggle()
 end
 
 function UI:Refresh()
+	-- Geschlossen gibt es nichts zu zeichnen; OnShow holt das nach.
+	if not self.frame:IsShown() then return end
 	local results = GearCheck.results or {}
 	if self.seenScan ~= GearCheck.scanId then
 		self.seenScan = GearCheck.scanId

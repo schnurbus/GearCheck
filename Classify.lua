@@ -308,9 +308,10 @@ local function isEquipLine(text)
 end
 
 -- Dauerhafte Anlegen-Zeilen wie „Erhöht die Verteidigungswertung um 63“.
-local function passiveEquipStats(link)
+-- lines ist optional: wer den Tooltip schon gelesen hat, gibt ihn mit.
+local function passiveEquipStats(link, lines)
 	local stats = {}
-	local lines = Classify.Lines(link)
+	lines = lines or Classify.Lines(link)
 	for index = 1, #lines do
 		local line = lines[index]
 		if isGreenLine(line) and isEquipLine(line.text) and not isProcLine(line.text) then
@@ -347,6 +348,46 @@ local function readApiStats(link)
 	return stats
 end
 
+-- Weiße Zeile „211 Blocken“ / „211 Block“. Das hat jedes Schild, auch ein Zaubererschild.
+local function shieldBlockAmount(lines)
+	local template = SHIELD_BLOCK_TEMPLATE
+	if not template or template == "" or not lines then return 0 end
+	local pattern = "^%s*" .. string.gsub(template, "%%d", "(%%d+)") .. "%s*$"
+	for index = 1, #lines do
+		local text = lines[index].text
+		if text then
+			local amount = string.match(text, pattern)
+			if amount then
+				return tonumber(amount) or 0
+			end
+		end
+	end
+	return 0
+end
+
+-- GetItemStats zählt den Grundblock als Blockwert. Ein Bonus bleibt, wenn er darüber liegt.
+-- Der Grundblock steckt nur in einem Schlüssel. Blockwert zuerst; Blockwertung nur,
+-- wenn dort kein Blockwert steht. Sonst schrumpft eine echte Blockwertung mit.
+local BASE_BLOCK_KEYS = { "blockValue", "block" }
+
+local function omitBaseBlock(stats, lines)
+	local base = shieldBlockAmount(lines)
+	if base <= 0 then return end
+	for index = 1, #BASE_BLOCK_KEYS do
+		local key = BASE_BLOCK_KEYS[index]
+		local current = stats[key]
+		if current and current >= base then
+			local kept = current - base
+			if kept > 0 then
+				stats[key] = kept
+			else
+				stats[key] = nil
+			end
+			return
+		end
+	end
+end
+
 local function itemStats(link)
 	local stats = readApiStats(link)
 	local lines = Classify.Lines(link)
@@ -365,7 +406,9 @@ local function itemStats(link)
 			end
 		end
 	end
-	addEquipStats(stats, passiveEquipStats(link))
+	-- Vor dem Anlegen-Bonus. Sonst verschluckt der Grundblock einen kleineren Blockwert.
+	omitBaseBlock(stats, lines)
+	addEquipStats(stats, passiveEquipStats(link, lines))
 	return stats
 end
 
@@ -762,8 +805,8 @@ local function isSocketBonus(text)
 	return string.sub(text, 1, #prefix) == prefix
 end
 
-local function addSocketBonus(link, into)
-	local lines = Classify.Lines(link)
+local function addSocketBonus(link, into, lines)
+	lines = lines or Classify.Lines(link)
 	for index = 1, #lines do
 		local line = lines[index]
 		if line.g > 0.85 and line.r < 0.25 and line.b < 0.25 and isSocketBonus(line.text) then
@@ -775,8 +818,8 @@ end
 -- Dauerhafte Werte: Grundwerte, Anlegen-Wertungen, Edelsteine, Sockelbonus. Procs zählen nicht.
 local function passiveStats(link)
 	local stats = readApiStats(link)
+	local lines = Classify.Lines(link)
 	if not hasStats(stats) then
-		local lines = Classify.Lines(link)
 		for index = 1, #lines do
 			local line = lines[index]
 			if isGreenLine(line) and not isTriggeredLine(line.text) and not isProcLine(line.text) and not isSocketBonus(line.text) then
@@ -784,8 +827,8 @@ local function passiveStats(link)
 			end
 		end
 	end
-	addEquipStats(stats, passiveEquipStats(link))
-	addSocketBonus(link, stats)
+	addEquipStats(stats, passiveEquipStats(link, lines))
+	addSocketBonus(link, stats, lines)
 	return stats
 end
 
@@ -823,6 +866,206 @@ local function enchantDefenseSkill(enchantId)
 	local override = enchantId and Data.enchants[enchantId]
 	if not override then return 0 end
 	return override.defenseSkill or 0
+end
+
+local function enchantProfiles(slotKey, equipLoc)
+	local max = Data.enchantMax
+	if not max or not slotKey then return nil end
+	if slotKey == "MainHandSlot" or slotKey == "SecondaryHandSlot" then
+		if equipLoc == "INVTYPE_SHIELD" then return max.shield end
+		if equipLoc == "INVTYPE_2HWEAPON" then return max.weapon2h end
+		if equipLoc == "INVTYPE_WEAPON" or equipLoc == "INVTYPE_WEAPONMAINHAND" or equipLoc == "INVTYPE_WEAPONOFFHAND" then
+			return max.weapon1h
+		end
+		return nil
+	end
+	if slotKey == "RangedSlot" then
+		if equipLoc == "INVTYPE_RANGED" or equipLoc == "INVTYPE_RANGEDRIGHT" or equipLoc == "INVTYPE_THROWN" then
+			return max.ranged
+		end
+		return nil
+	end
+	return max[slotKey]
+end
+
+local function foldEnchantStat(stats, target, sources)
+	local amount = stats[target] or 0
+	for index = 1, #sources do
+		local value = stats[sources[index]] or 0
+		if value > amount then amount = value end
+		stats[sources[index]] = nil
+	end
+	if amount > 0 then stats[target] = amount end
+end
+
+local ALL_STAT_KEYS = { "strength", "agility", "stamina", "intellect", "spirit" }
+
+local function applyAllStats(text, stats)
+	local lower = string.lower(text or "")
+	local amount = tonumber(string.match(lower, "all stats by (%d+)"))
+		or tonumber(string.match(lower, "(%d+)%s*all stats"))
+		or tonumber(string.match(lower, "alle werte um (%d+)"))
+		or tonumber(string.match(lower, "(%d+)%s*alle werte"))
+	if not amount then return end
+	for index = 1, #ALL_STAT_KEYS do
+		local key = ALL_STAT_KEYS[index]
+		if (stats[key] or 0) < amount then
+			stats[key] = amount
+		end
+	end
+end
+
+local function enchantPoolAmount(text, word)
+	return tonumber(string.match(text, "(%d+)%s*" .. word))
+		or tonumber(string.match(text, word .. "%D+(%d+)"))
+end
+
+-- Gesundheit, Rüstung und Manavorrat stehen nicht in der Wertungsliste.
+local function harvestEnchantPools(text, stats)
+	local lower = string.lower(text or "")
+	if string.find(lower, "armor pen", 1, true) or string.find(lower, "rüstungsdurch", 1, true) then
+		return
+	end
+	local regen = string.find(lower, "per 5", 1, true)
+		or string.find(lower, "every 5", 1, true)
+		or string.find(lower, "alle 5", 1, true)
+	if regen then return end
+	local health = enchantPoolAmount(lower, "health") or enchantPoolAmount(lower, "gesundheit")
+	local armor = enchantPoolAmount(lower, "armor") or enchantPoolAmount(lower, "rüstung")
+	local mana = enchantPoolAmount(lower, "mana")
+	if health and health > (stats.health or 0) then stats.health = health end
+	if armor and armor > (stats.armor or 0) then stats.armor = armor end
+	if mana and mana > (stats.mana or 0) then stats.mana = mana end
+end
+
+-- Wörter, die neben den Werten in einer reinen Werte-Verzauberung stehen dürfen.
+local ENCHANT_FILLER = {
+	"all stats", "alle werte", "health", "gesundheit", "armor", "rüstung", "mana",
+	"increases", "erhöht", "and", "und", "by", "um", "to", "the", "your", "die", "der", "des", "den",
+}
+
+-- Bleibt nach Werten und Füllwörtern noch Text übrig, hat die Verzauberung einen
+-- Zusatzeffekt (Lauftempo, Resistenz, Bedrohung). Dann ist sie keine kleinere Fassung.
+local function hasExtraEffect(text)
+	local rest = string.lower(text or "")
+	local list = statNeedles()
+	for index = 1, #list do
+		local start, stop = string.find(rest, list[index].needle, 1, true)
+		if start then
+			rest = string.sub(rest, 1, start - 1) .. " " .. string.sub(rest, stop + 1)
+		end
+	end
+	-- Nur ganze Wörter, sonst zerlegt „der“ ein „Widerstand“.
+	for index = 1, #ENCHANT_FILLER do
+		rest = string.gsub(rest, "%f[%a\128-\255]" .. ENCHANT_FILLER[index] .. "%f[^%a\128-\255]", " ")
+	end
+	return string.find(rest, "[%a\128-\255][%a\128-\255][%a\128-\255]") ~= nil
+end
+
+local enchantSizeCache = {}
+
+-- Liefert die Werte der Verzauberung und ob sie einen Zusatzeffekt hat.
+-- Das Ergebnis wird nur gelesen, nie verändert; deshalb darf es im Cache liegen.
+local function enchantSizeStats(enchantId)
+	local cached = enchantSizeCache[enchantId]
+	if cached then
+		return cached.stats, cached.extra
+	end
+	local stats = {}
+	local extra = false
+	local lines = Classify.Lines("item:6948:" .. enchantId)
+	for index = 1, #lines do
+		local line = lines[index]
+		-- Die Benutzen-Zeile gehört zum Ruhestein, nicht zur Verzauberung.
+		if isGreenLine(line) and not isProcLine(line.text) and not isTriggeredLine(line.text) then
+			harvest(line.text, stats)
+			applyAllStats(line.text, stats)
+			harvestEnchantPools(line.text, stats)
+			if hasExtraEffect(line.text) then
+				extra = true
+			end
+		end
+	end
+	foldEnchantStat(stats, "spellPower", { "spellDamage", "healing" })
+	foldEnchantStat(stats, "attackPower", { "meleeAP", "rangedAP" })
+	foldEnchantStat(stats, "hit", { "spellHit", "meleeHit", "rangedHit" })
+	foldEnchantStat(stats, "crit", { "spellCrit", "meleeCrit", "rangedCrit" })
+	foldEnchantStat(stats, "haste", { "spellHaste", "rangedHaste" })
+	local override = Data.enchants[enchantId]
+	if override then
+		if (override.defense or 0) > (stats.defense or 0) then
+			stats.defense = override.defense
+		end
+		if (override.resilience or 0) > (stats.resilience or 0) then
+			stats.resilience = override.resilience
+		end
+		if (override.defenseSkill or 0) > (stats.defenseSkill or 0) then
+			stats.defenseSkill = override.defenseSkill
+		end
+	end
+	-- Leerer Tooltip heißt meist: Ruhestein noch nicht im Cache. Dann später neu lesen.
+	if #lines > 0 then
+		enchantSizeCache[enchantId] = { stats = stats, extra = extra }
+	end
+	return stats, extra
+end
+
+local function enchantBest(profiles, key)
+	local best, found
+	for index = 1, #profiles do
+		local value = profiles[index][key]
+		if value and value > 0 then
+			found = true
+			if not best or value > best then best = value end
+		end
+	end
+	if not found then return nil end
+	return best
+end
+
+local function meetsEnchantProfile(stats, profile)
+	for key, cap in pairs(profile) do
+		if (stats[key] or 0) < cap then return false end
+	end
+	return true
+end
+
+-- Kleiner, wenn ein volles Profil dieselben Werte hat und wenigstens einen übertrifft.
+-- Ein Wert ohne Obergrenze auf diesem Slot zählt nicht mit.
+local function dominatedByEnchant(stats, profile, profiles)
+	local compared, weaker = false, false
+	for key, amount in pairs(stats) do
+		if amount > 0 then
+			local cap = profile[key]
+			if cap and cap > 0 then
+				compared = true
+				if amount > cap then return false end
+				if amount < cap then weaker = true end
+			else
+				local best = enchantBest(profiles, key)
+				if best and amount >= best then return false end
+			end
+		end
+	end
+	return compared and weaker
+end
+
+local function enchantIsSmall(enchantId, slotKey, equipLoc)
+	local override = Data.enchants[enchantId]
+	if override and not override.defense and not override.resilience and not override.defenseSkill then
+		return false
+	end
+	local profiles = enchantProfiles(slotKey, equipLoc)
+	if not profiles then return false end
+	local stats, extra = enchantSizeStats(enchantId)
+	if extra or not hasStats(stats) then return false end
+	for index = 1, #profiles do
+		if meetsEnchantProfile(stats, profiles[index]) then return false end
+	end
+	for index = 1, #profiles do
+		if dominatedByEnchant(stats, profiles[index], profiles) then return true end
+	end
+	return false
 end
 
 local function linkWithoutGems(link)
@@ -1122,7 +1365,9 @@ end
 local function enchantRequired(slot, equipLoc, classToken)
 	if slot.enchant == "always" then return true end
 	if slot.enchant == "offhand" then
+		-- INVTYPE_2HWEAPON: Titanengriff-Krieger tragen eine Zweihandwaffe in der Schildhand.
 		return equipLoc == "INVTYPE_SHIELD" or equipLoc == "INVTYPE_WEAPON" or equipLoc == "INVTYPE_WEAPONOFFHAND"
+			or equipLoc == "INVTYPE_2HWEAPON"
 	end
 	if slot.enchant == "hunter" and classToken == "HUNTER" then
 		return equipLoc == "INVTYPE_RANGED" or equipLoc == "INVTYPE_RANGEDRIGHT"
@@ -1130,8 +1375,10 @@ local function enchantRequired(slot, equipLoc, classToken)
 	return false
 end
 
-local function addIssue(issues, slotName, text)
-	issues[#issues + 1] = { slot = slotName, text = text }
+-- loot = true: verletzt die Loot-Regel (maximal gesockelt und verzaubert).
+-- Sonst ist es ein Hinweis (Rolle, PvP, Verteidigung), der die Loot-Berechtigung nicht berührt.
+local function addIssue(issues, slotName, text, loot)
+	issues[#issues + 1] = { slot = slotName, text = text, loot = loot and true or false }
 end
 
 local function shortName(name)
@@ -1394,17 +1641,8 @@ local function metaStatus(unit)
 						if active ~= nil then
 							return metaResult(active, slot.name)
 						end
-						if meta and meta.req then
-							local counts, unknown = countGemColors(unit)
-							local met = metaRequirementMet(meta.req, counts)
-							if met == true then
-								return metaResult(true, slot.name)
-							end
-							if unknown == 0 then
-								return metaResult(false, slot.name)
-							end
-						end
-						return metaResult(false, slot.name)
+						-- Weder Farben noch Tooltip sind eindeutig: lieber kein Befund als ein falscher.
+						return nil
 					end
 				end
 			end
@@ -1453,8 +1691,22 @@ end
 -- Kleiner als die höchste Fassung: epische Werte, darüber Drachenaugen.
 -- Prismatisch zählt die Alptraumträne. Metas ohne Wertung (nur Effekt) bleiben,
 -- solange ihre Gegenstandsstufe die volle Fassung ist.
-local function gemIsSmall(gemLink, gemId)
+local gemStatsCache = {}
+
+-- Edelstein-Werte ändern sich nie. Nur gefüllte Ergebnisse cachen,
+-- denn ein noch nicht geladener Edelstein liefert erst einmal nichts.
+local function gemStats(gemLink)
+	local cached = gemStatsCache[gemLink]
+	if cached then return cached end
 	local stats = itemStats(gemLink)
+	if hasStats(stats) then
+		gemStatsCache[gemLink] = stats
+	end
+	return stats
+end
+
+local function gemIsSmall(gemLink, gemId, stats)
+	stats = stats or itemStats(gemLink)
 	local meta = Data.metaGems[gemId] ~= nil or gemColor(gemId) == "meta"
 	if meta then
 		local itemLevel = select(4, GetItemInfo(gemLink))
@@ -1483,14 +1735,51 @@ local function gemIsSmall(gemLink, gemId)
 	return share ~= nil and share < 1
 end
 
+-- true: Gegenstand hat einen Sockel mehr als die Grundfassung (Schnalle, Schmiedesockel).
+-- false: hat keinen. nil: Grundfassung noch nicht im Cache, also unbekannt.
+local function extraSocket(link, parsed, filled)
+	if not GetItemInfo(link) then return nil end
+	local baseInfo = Classify.SocketInfo(string.format("item:%d:0:0:0:0:0:0:0:0", parsed.id))
+	local wornInfo = Classify.SocketInfo(link)
+	if not baseInfo or not wornInfo then return nil end
+	return (wornInfo.total + filled) > baseInfo.total
+end
+
+local DRAGON_EYE_MAX = 3
+
+local function professionGaps(issues, rings, smithSockets, dragonEyes)
+	-- Nur Verzauberer verzaubern Ringe. Ist einer verzaubert, muss es der andere auch sein.
+	if #rings == 2 and rings[1].enchanted ~= rings[2].enchanted then
+		local bare = rings[1].enchanted and rings[2] or rings[1]
+		addIssue(issues, bare.name, GearCheck:T("RING_ENCHANT_MISSING"), true)
+	end
+	-- Schmiede sockeln Handgelenke und Hände. Hat ein Teil den Zusatzsockel, fehlt er am anderen.
+	if #smithSockets == 2 then
+		local first, second = smithSockets[1], smithSockets[2]
+		if first.extra == true and second.extra == false then
+			addIssue(issues, second.name, GearCheck:T("SMITH_SOCKET_MISSING"), true)
+		elseif second.extra == true and first.extra == false then
+			addIssue(issues, first.name, GearCheck:T("SMITH_SOCKET_MISSING"), true)
+		end
+	end
+	-- Juweliere dürfen drei Drachenaugen tragen.
+	if dragonEyes > 0 and dragonEyes < DRAGON_EYE_MAX then
+		addIssue(issues, GearCheck:T("GEMS"), GearCheck:T("DRAGON_EYES_MISSING", dragonEyes, DRAGON_EYE_MAX), true)
+	end
+end
+
 function Classify.Unit(unit, context)
 	local issues = {}
-	if not unit or not context or context.role == "unknown" then
+	if not unit or not context then
 		return issues, nil, nil
 	end
 
+	-- Ohne klare Rolle entfallen nur die Rollenprüfungen. Sockel und Verzauberungen gelten trotzdem.
+	local roleKnown = context.role and context.role ~= "unknown"
 	local strict = (context.level or 0) >= 80
 	local socketedItems, gemsFound = 0, 0
+	-- Berufsboni sieht man beim Betrachten nicht. Eine Lücke verrät sich aber, wenn nur ein Teil davon da ist.
+	local rings, smithSockets, dragonEyes = {}, {}, 0
 
 	for index = 1, #Data.slots do
 		local slot = Data.slots[index]
@@ -1499,7 +1788,9 @@ function Classify.Unit(unit, context)
 		local parsed = Classify.ParseLink(link)
 		if link and parsed then
 			local equip = select(9, GetItemInfo(link))
-			if equip == "INVTYPE_RELIC" then
+			if not roleKnown then
+				-- keine Rollenprüfung
+			elseif equip == "INVTYPE_RELIC" then
 				local reason = relicMismatch(link, context.role)
 				if reason == "pvp" then
 					addIssue(issues, slot.name, GearCheck:T("PVP_RELIC"))
@@ -1524,24 +1815,22 @@ function Classify.Unit(unit, context)
 				end
 				if sockets then
 					if sockets.meta > 0 then
-						addIssue(issues, slot.name, GearCheck:T("META_SOCKET_EMPTY"))
+						addIssue(issues, slot.name, GearCheck:T("META_SOCKET_EMPTY"), true)
 					end
 					if sockets.normal == 1 then
-						addIssue(issues, slot.name, GearCheck:T("SOCKET_EMPTY"))
+						addIssue(issues, slot.name, GearCheck:T("SOCKET_EMPTY"), true)
 					elseif sockets.normal > 1 then
-						addIssue(issues, slot.name, GearCheck:T("SOCKETS_EMPTY", sockets.normal))
+						addIssue(issues, slot.name, GearCheck:T("SOCKETS_EMPTY", sockets.normal), true)
 					end
 				end
 
 				if slot.buckle then
-					local baseLink = string.format("item:%d:0:0:0:0:0:0:0:0", parsed.id)
-					if GetItemInfo(link) then
-						local baseInfo = Classify.SocketInfo(baseLink)
-						local wornInfo = Classify.SocketInfo(link)
-						if baseInfo and wornInfo and (wornInfo.total + filled) <= baseInfo.total then
-							addIssue(issues, slot.name, GearCheck:T("BUCKLE_MISSING"))
-						end
+					local extra = extraSocket(link, parsed, filled)
+					if extra == false then
+						addIssue(issues, slot.name, GearCheck:T("BUCKLE_MISSING"), true)
 					end
+				elseif slot.smithSocket then
+					smithSockets[#smithSockets + 1] = { name = slot.name, extra = extraSocket(link, parsed, filled) }
 				end
 			elseif filled > 0 then
 				socketedItems = socketedItems + 1
@@ -1556,32 +1845,44 @@ function Classify.Unit(unit, context)
 					end
 					local name = shortName(GetItemInfo(gemLink))
 					local meta = Data.metaGems[gemId]
-					if meta then
+					local stats = gemStats(gemLink)
+					if Data.dragonEyes[gemId] then
+						dragonEyes = dragonEyes + 1
+					end
+					if not roleKnown then
+						-- keine Rollenprüfung
+					elseif meta then
 						if not meta[context.role] then
 							addIssue(issues, slot.name, mismatchText("meta", Data.FirstRole(meta), name))
 						end
 					else
-						local reason = mismatch(itemStats(gemLink), context.class, context.role)
+						local reason = mismatch(stats, context.class, context.role)
 						if reason then
 							addIssue(issues, slot.name, mismatchText("gem", reason, name))
 						end
 					end
-					if strict and gemIsSmall(gemLink, gemId) then
+					if strict and gemIsSmall(gemLink, gemId, stats) then
 						if name then
-							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL", name))
+							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL", name), true)
 						else
-							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL_UNNAMED"))
+							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL_UNNAMED"), true)
 						end
 					end
 				end
 			end
 
+			if slot.ring then
+				rings[#rings + 1] = { name = slot.name, enchanted = parsed.enchant > 0 }
+			end
 			if strict and enchantRequired(slot, equip, context.class) and parsed.enchant == 0 then
-				addIssue(issues, slot.name, GearCheck:T("ENCHANT_MISSING"))
+				addIssue(issues, slot.name, GearCheck:T("ENCHANT_MISSING"), true)
 			elseif parsed.enchant > 0 then
-				local reason = enchantMismatch(parsed.enchant, context.class, context.role)
+				local reason = roleKnown and enchantMismatch(parsed.enchant, context.class, context.role)
 				if reason then
 					addIssue(issues, slot.name, mismatchText("enchant", reason))
+				end
+				if strict and enchantIsSmall(parsed.enchant, slot.key, equip) then
+					addIssue(issues, slot.name, GearCheck:T("ENCHANT_SMALL"), true)
 				end
 			end
 		end
@@ -1606,6 +1907,10 @@ function Classify.Unit(unit, context)
 		end
 	end
 
+	if strict then
+		professionGaps(issues, rings, smithSockets, dragonEyes)
+	end
+
 	local note
 	local gemsIncomplete = strict and socketedItems > 0 and gemsFound == 0
 	if gemsIncomplete then
@@ -1624,7 +1929,7 @@ function Classify.Unit(unit, context)
 	if not gemsIncomplete then
 		meta = metaStatus(unit)
 		if meta and not meta.active then
-			addIssue(issues, meta.slot, GearCheck:T("META_INACTIVE"))
+			addIssue(issues, meta.slot, GearCheck:T("META_INACTIVE"), true)
 		end
 	end
 

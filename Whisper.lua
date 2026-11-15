@@ -67,10 +67,13 @@ end
 function Whisper:Body(record)
 	local parts = {}
 	parts[#parts + 1] = GearCheck:T("WHISPER_ROLE", record.roleLabel or GearCheck:T("ROLE_UNKNOWN"))
+	-- Nur Loot-Befunde: Rollen-Hinweise sind keine Pflicht und gehören nicht ins Flüstern.
 	local issues = record.issues or {}
 	for index = 1, #issues do
 		local issue = issues[index]
-		parts[#parts + 1] = issue.slot .. ": " .. issue.text .. "."
+		if issue.loot then
+			parts[#parts + 1] = issue.slot .. ": " .. issue.text .. "."
+		end
 	end
 	return table.concat(parts, " ")
 end
@@ -80,8 +83,7 @@ function Whisper:Collect()
 	local results = GearCheck.results or {}
 	for index = 1, #results do
 		local record = results[index]
-		local issues = record.issues
-		if record.status == "done" and not record.isPlayer and issues and #issues > 0 and record.name and record.name ~= "?" and record.name ~= UNKNOWN then
+		if self:CanSend(record) then
 			targets[#targets + 1] = record
 		end
 	end
@@ -118,8 +120,7 @@ function Whisper:Confirm()
 end
 
 function Whisper:CanSend(record)
-	local issues = record and record.issues
-	if not record or record.isPlayer or record.status ~= "done" or not issues or #issues == 0 then
+	if not record or record.isPlayer or record.status ~= "done" or GearCheck:CountIssues(record) == 0 then
 		return false
 	end
 	if not record.name or record.name == "?" or record.name == UNKNOWN then
@@ -128,7 +129,7 @@ function Whisper:CanSend(record)
 	return true
 end
 
-function Whisper:SendOne(record)
+function Whisper:ConfirmOne(record)
 	if self:IsBusy() then
 		GearCheck:Print(GearCheck:T("WHISPER_BUSY"))
 		return
@@ -141,11 +142,8 @@ function Whisper:SendOne(record)
 		StaticPopup_Hide("GEARCHECK_WHISPER")
 	end
 	self.pending = { record }
-	self:Start()
-end
-
-function Whisper:ConfirmOne(record)
-	self:SendOne(record)
+	StaticPopupDialogs["GEARCHECK_WHISPER"].text = GearCheck:T("WHISPER_ONE")
+	StaticPopup_Show("GEARCHECK_WHISPER")
 end
 
 function Whisper:Start()

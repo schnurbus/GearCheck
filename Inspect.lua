@@ -73,7 +73,7 @@ local function averageLevel(gear)
 end
 
 local function isReady(record)
-	return record and record.status == "done" and (not record.issues or #record.issues == 0)
+	return record and record.status == "done" and GearCheck:CountIssues(record) == 0
 end
 
 local function readyLabel(record)
@@ -154,8 +154,11 @@ local function fillStatusRows(rows, record, width)
 			end
 			add(GearCheck:T("DEFENSE"), record.defense.summary, color)
 		end
-		local count = record.issues and #record.issues or 0
-		add(GearCheck:T("LABEL_ISSUES"), tostring(count), count > 0 and RED or GREEN)
+		local loot, hints = GearCheck:CountIssues(record)
+		add(GearCheck:T("LABEL_ISSUES"), tostring(loot), loot > 0 and RED or GREEN)
+		if hints > 0 then
+			add(GearCheck:T("LABEL_HINTS"), tostring(hints), GOLD)
+		end
 	end
 
 	for index = shown + 1, #rows do
@@ -166,7 +169,7 @@ end
 
 function InspectView:CanWhisper(record)
 	if not record or record.isPlayer or record.status ~= "done" then return false end
-	if not record.issues or #record.issues == 0 then return false end
+	if GearCheck:CountIssues(record) == 0 then return false end
 	if not record.name or record.name == "?" or record.name == UNKNOWN then return false end
 	return true
 end
@@ -1091,7 +1094,8 @@ function InspectView:RenderPage()
 			for index = 1, #record.issues do
 				local issue = record.issues[index]
 				if not (record.meta and not record.meta.active and issue.text == GearCheck:T("META_INACTIVE")) then
-					findings[#findings + 1] = "|cffff3333" .. issue.slot .. ":|r " .. issue.text
+					local color = issue.loot and "|cffff3333" or "|cffffff80"
+					findings[#findings + 1] = color .. issue.slot .. ":|r " .. issue.text
 				end
 			end
 		end
