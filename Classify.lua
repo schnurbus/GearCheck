@@ -692,6 +692,28 @@ local function playerRoleOf(role)
 	return role
 end
 
+-- Sockel und Edelsteine für die Anzeige am Slot. Einmal pro Eintrag; leere Ergebnisse
+-- (Gegenstand noch nicht im Cache) bleiben offen, damit Classify.Complete es nachholt.
+local function fillSockets(entry)
+	local link = entry.link
+	local parsed = Classify.ParseLink(link)
+	if not parsed then return end
+	entry.enchant = parsed.enchant
+	local gems = {}
+	for gemIndex = 1, 4 do
+		local gemId = gemIdAt(link, parsed, gemIndex)
+		if gemId > 0 then
+			gems[#gems + 1] = gemId
+		end
+	end
+	local info = Classify.SocketInfo(link)
+	if not info and #gems == 0 then return end
+	entry.gems = gems
+	entry.emptyMeta = info and info.meta or 0
+	entry.emptyNormal = info and info.normal or 0
+	entry.socketsRead = true
+end
+
 function Classify.Gear(unit, context)
 	local gear = {}
 	if not unit then return gear end
@@ -716,6 +738,7 @@ function Classify.Gear(unit, context)
 			entry.role = role
 			entry.fit = fit
 			entry.classified = decided or itemLevel ~= nil
+			fillSockets(entry)
 		else
 			entry.empty = true
 			entry.classified = true
@@ -732,6 +755,9 @@ function Classify.Complete(record)
 	local playerRole = playerRoleOf(record.role)
 	for index = 1, #gear do
 		local entry = gear[index]
+		if entry.link and not entry.socketsRead then
+			fillSockets(entry)
+		end
 		if entry.link and not entry.level then
 			local name, _, quality, itemLevel, _, _, _, _, _, texture = GetItemInfo(entry.link)
 			if itemLevel then
@@ -1377,8 +1403,9 @@ end
 
 -- loot = true: verletzt die Loot-Regel (maximal gesockelt und verzaubert).
 -- Sonst ist es ein Hinweis (Rolle, PvP, Verteidigung), der die Loot-Berechtigung nicht berührt.
-local function addIssue(issues, slotName, text, loot)
-	issues[#issues + 1] = { slot = slotName, text = text, loot = loot and true or false }
+-- kind ordnet den Befund für die Anzeige am Slot ein: "enchant" (fehlt), "enchantSmall", "socket", "gem".
+local function addIssue(issues, slotName, text, loot, kind)
+	issues[#issues + 1] = { slot = slotName, text = text, loot = loot and true or false, kind = kind }
 end
 
 local function shortName(name)
@@ -1751,15 +1778,15 @@ local function professionGaps(issues, rings, smithSockets, dragonEyes)
 	-- Nur Verzauberer verzaubern Ringe. Ist einer verzaubert, muss es der andere auch sein.
 	if #rings == 2 and rings[1].enchanted ~= rings[2].enchanted then
 		local bare = rings[1].enchanted and rings[2] or rings[1]
-		addIssue(issues, bare.name, GearCheck:T("RING_ENCHANT_MISSING"), true)
+		addIssue(issues, bare.name, GearCheck:T("RING_ENCHANT_MISSING"), true, "enchant")
 	end
 	-- Schmiede sockeln Handgelenke und Hände. Hat ein Teil den Zusatzsockel, fehlt er am anderen.
 	if #smithSockets == 2 then
 		local first, second = smithSockets[1], smithSockets[2]
 		if first.extra == true and second.extra == false then
-			addIssue(issues, second.name, GearCheck:T("SMITH_SOCKET_MISSING"), true)
+			addIssue(issues, second.name, GearCheck:T("SMITH_SOCKET_MISSING"), true, "socket")
 		elseif second.extra == true and first.extra == false then
-			addIssue(issues, first.name, GearCheck:T("SMITH_SOCKET_MISSING"), true)
+			addIssue(issues, first.name, GearCheck:T("SMITH_SOCKET_MISSING"), true, "socket")
 		end
 	end
 	-- Juweliere dürfen drei Drachenaugen tragen.
@@ -1815,19 +1842,19 @@ function Classify.Unit(unit, context)
 				end
 				if sockets then
 					if sockets.meta > 0 then
-						addIssue(issues, slot.name, GearCheck:T("META_SOCKET_EMPTY"), true)
+						addIssue(issues, slot.name, GearCheck:T("META_SOCKET_EMPTY"), true, "socket")
 					end
 					if sockets.normal == 1 then
-						addIssue(issues, slot.name, GearCheck:T("SOCKET_EMPTY"), true)
+						addIssue(issues, slot.name, GearCheck:T("SOCKET_EMPTY"), true, "socket")
 					elseif sockets.normal > 1 then
-						addIssue(issues, slot.name, GearCheck:T("SOCKETS_EMPTY", sockets.normal), true)
+						addIssue(issues, slot.name, GearCheck:T("SOCKETS_EMPTY", sockets.normal), true, "socket")
 					end
 				end
 
 				if slot.buckle then
 					local extra = extraSocket(link, parsed, filled)
 					if extra == false then
-						addIssue(issues, slot.name, GearCheck:T("BUCKLE_MISSING"), true)
+						addIssue(issues, slot.name, GearCheck:T("BUCKLE_MISSING"), true, "socket")
 					end
 				elseif slot.smithSocket then
 					smithSockets[#smithSockets + 1] = { name = slot.name, extra = extraSocket(link, parsed, filled) }
@@ -1863,9 +1890,9 @@ function Classify.Unit(unit, context)
 					end
 					if strict and gemIsSmall(gemLink, gemId, stats) then
 						if name then
-							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL", name), true)
+							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL", name), true, "gem")
 						else
-							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL_UNNAMED"), true)
+							addIssue(issues, slot.name, GearCheck:T("GEM_SMALL_UNNAMED"), true, "gem")
 						end
 					end
 				end
@@ -1875,14 +1902,14 @@ function Classify.Unit(unit, context)
 				rings[#rings + 1] = { name = slot.name, enchanted = parsed.enchant > 0 }
 			end
 			if strict and enchantRequired(slot, equip, context.class) and parsed.enchant == 0 then
-				addIssue(issues, slot.name, GearCheck:T("ENCHANT_MISSING"), true)
+				addIssue(issues, slot.name, GearCheck:T("ENCHANT_MISSING"), true, "enchant")
 			elseif parsed.enchant > 0 then
 				local reason = roleKnown and enchantMismatch(parsed.enchant, context.class, context.role)
 				if reason then
 					addIssue(issues, slot.name, mismatchText("enchant", reason))
 				end
 				if strict and enchantIsSmall(parsed.enchant, slot.key, equip) then
-					addIssue(issues, slot.name, GearCheck:T("ENCHANT_SMALL"), true)
+					addIssue(issues, slot.name, GearCheck:T("ENCHANT_SMALL"), true, "enchantSmall")
 				end
 			end
 		end

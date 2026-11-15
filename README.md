@@ -25,15 +25,23 @@ Das Fenster lässt sich ziehen. Die Position wird in `GearCheckDB` gespeichert u
 
 Dieselben Aktionen liegen im Fenster auf den Schaltflächen **Ziel prüfen**, **Gruppe prüfen** und **Fehler flüstern**.
 
-Links steht die Spielerliste, eingefärbt nach Klasse. Rechts daneben die Rolle und das Loot-Urteil: `Loot OK`, oder `Loot` mit der Zahl der Loot-Befunde. Ein gelbes `+N` zählt die Hinweise. Ein Klick auf einen Namen öffnet die Details: Klasse, Stufe, durchschnittliche Gegenstandsstufe, Talentverteilung und die Ausrüstung. Die Maus über einem Slot zeigt den Gegenstandstooltip. Umschalt-Klick fügt den Gegenstandslink in den Chat ein.
+Oben fasst eine Zeile die Gruppe zusammen, etwa „22/25 Loot OK · 2 mit Befunden · 1 nicht prüfbar“. Der Balken darunter zeigt den Fortschritt der Prüfung. **Nur Probleme** blendet alle aus, die Loot OK sind; **Befunde zuerst** sortiert die Liste danach. Beide Schalter bleiben gespeichert.
+
+Links steht die Spielerliste. Vor jedem Namen zeigt ein Häkchen, Kreuz oder eine Sanduhr das Loot-Urteil, danach folgen Klassen- und Rollen-Icon. Rechts steht `Loot OK` oder `Loot` mit der Zahl der Loot-Befunde; ein gelbes `+N` zählt die Hinweise. Ein Klick auf einen Namen öffnet die Details: Klasse, Stufe, durchschnittliche Gegenstandsstufe, Talentverteilung, die Ausrüstung und darunter die Abschnitte Loot, Hinweise, Meta-Edelstein und Verteidigung. Die Maus über einem Slot zeigt den Gegenstandstooltip und den Stand der Verzauberung. Umschalt-Klick fügt den Gegenstandslink in den Chat ein.
 
 Beim Betrachten eines anderen Charakters sitzt rechts direkt am Betrachten-Fenster ein weiteres Fenster. Darin stehen Loot-Berechtigung, Rolle, Talentverteilung, Gegenstandsstufe und die Befunde. Der Pfeil oben klappt es ein und aus; die Wahl bleibt gespeichert. Gibt es Loot-Befunde, liegt unten **Fehler flüstern**. Die Nachfrage schickt sie nur an diesen Spieler.
 
-Farben an den Slots:
+An jedem Slot:
+
+- Der Rahmen um das Icon hat die Qualitätsfarbe des Gegenstands.
+- Unter der Gegenstandsstufe stehen kleine Icons: zuerst die Verzauberung (weiß: verzaubert, gelb: kleinere Fassung, rot: fehlt), dann die gesockelten Edelsteine und leere Sockel.
+- Rot hinterlegt: der Slot hat einen Loot-Befund. Gelb hinterlegt: nur ein Hinweis.
+
+Die Rolle neben der Gegenstandsstufe ist eingefärbt:
 
 - Grün: der Gegenstand passt zur erkannten Rolle.
 - Gelb: die Werte passen, gehören aber zu einer anderen Rolle.
-- Rot: die Werte passen nicht, oder der Slot hat einen Befund.
+- Rot: die Werte passen nicht.
 - Grau: keine eindeutige Zuordnung, oder der Slot ist leer.
 
 ## Was geprüft wird

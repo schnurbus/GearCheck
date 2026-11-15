@@ -19,6 +19,7 @@ local ROW_GAP = 2
 local GOLD = { 1, 0.82, 0 }
 local GREEN = { 0.12, 1, 0.12 }
 local RED = { 1, 0.2, 0.2 }
+local YELLOW = { 1, 0.85, 0.3 }
 local MUTED = { 0.55, 0.55, 0.55 }
 local WHITE = { 1, 1, 1 }
 local RULE = { 0.55, 0.45, 0.2, 0.85 }
@@ -153,6 +154,13 @@ local function fillStatusRows(rows, record, width)
 				color = RED
 			end
 			add(GearCheck:T("DEFENSE"), record.defense.summary, color)
+		end
+		if record.meta and record.meta.summary then
+			if record.meta.active then
+				add(GearCheck:T("SECTION_META"), GearCheck:T("META_STATE_ON"), GREEN)
+			else
+				add(GearCheck:T("SECTION_META"), GearCheck:T("META_STATE_OFF"), RED)
+			end
 		end
 		local loot, hints = GearCheck:CountIssues(record)
 		add(GearCheck:T("LABEL_ISSUES"), tostring(loot), loot > 0 and RED or GREEN)
@@ -370,6 +378,7 @@ function InspectView:EnsurePanel()
 	local scroll = CreateFrame("ScrollFrame", "GearCheckInspectScroll", panel, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", findings, "BOTTOMLEFT", -2, -4)
 	self.scroll = scroll
+	GearCheck.UI.HideIdleScrollBar(scroll)
 
 	local content = CreateFrame("Frame", nil, scroll)
 	content:SetWidth(200)
@@ -613,6 +622,7 @@ local function roleColor(entry, playerRole)
 	return 0.9, 0.9, 0.9
 end
 
+-- Befundtexte je Slot, Loot rot und Hinweise gelb eingefärbt.
 local function issuesBySlot(record)
 	local grouped = {}
 	local issues = record and record.issues
@@ -624,7 +634,8 @@ local function issuesBySlot(record)
 			list = {}
 			grouped[issue.slot] = list
 		end
-		list[#list + 1] = issue.text
+		local color = issue.loot and "|cffff3333" or "|cffffd94d"
+		list[#list + 1] = { text = issue.text, colored = color .. issue.text .. "|r" }
 	end
 	return grouped
 end
@@ -679,6 +690,9 @@ function InspectView:EnsureTab()
 	self.pageSummary = _G[page:GetName() .. "InsetSummary"]
 	self.pageReady = _G[page:GetName() .. "InsetReady"]
 	self.pageScroll = _G[page:GetName() .. "InsetScroll"]
+	if self.pageScroll then
+		GearCheck.UI.HideIdleScrollBar(self.pageScroll)
+	end
 	self.pageButton = _G[page:GetName() .. "InsetWhisper"]
 	self.portrait = _G[page:GetName() .. "Portrait"]
 	local function fitWhisperButton(button)
@@ -754,6 +768,15 @@ function InspectView:EnsureTab()
 		widget.role = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		widget.role:SetPoint("TOPLEFT", widget.level, "TOPRIGHT", 4, 0)
 		widget.role:SetJustifyH("LEFT")
+		-- Verzauberung, Edelsteine und leere Sockel rechtsbündig in der Zeile der Gegenstandsstufe.
+		widget.marks = {}
+		for mark = 1, 5 do
+			local texture = widget:CreateTexture(nil, "OVERLAY")
+			texture:SetWidth(12)
+			texture:SetHeight(12)
+			texture:Hide()
+			widget.marks[mark] = texture
+		end
 		widget.issues = widget:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		widget.issues:SetPoint("TOPLEFT", widget, "TOPLEFT", 114, -32)
 		widget.issues:SetJustifyH("LEFT")
@@ -773,6 +796,10 @@ function InspectView:EnsureTab()
 				end
 				if self.roleLabel then
 					GameTooltip:AddLine(self.roleLabel, self.roleR or 1, self.roleG or 1, self.roleB or 1)
+				end
+				if self.enchant then
+					local color = self.enchant.color
+					GameTooltip:AddLine(self.enchant.text, color[1], color[2], color[3])
 				end
 			else
 				GameTooltip:ClearLines()
@@ -844,15 +871,17 @@ function InspectView:OnTab(newID)
 	self:RenderPage()
 end
 
-local function paintGearRow(widget, entry, issueText, playerRole)
+-- found: Eintrag aus UI.SlotFindings (loot, hint, kinds) oder nil.
+local function paintGearRow(widget, entry, issueText, playerRole, found)
 	widget.link = entry.link
 	widget.slotName = entry.name
 	widget.itemName = entry.itemName
 	widget.slot:SetText(entry.name or "")
-	if issueText ~= "" then
-		setColor(widget.slot, RED)
+	if found and (found.loot or found.hint) then
+		local color = found.loot and RED or YELLOW
+		setColor(widget.slot, color)
 		if widget.border then
-			widget.border:SetVertexColor(RED[1], RED[2], RED[3])
+			widget.border:SetVertexColor(color[1], color[2], color[3])
 			widget.border:SetAlpha(0.55)
 		end
 	else
@@ -902,6 +931,24 @@ local function paintGearRow(widget, entry, issueText, playerRole)
 		widget.roleLabel = nil
 	end
 	widget.issues:SetText(issueText)
+
+	widget.enchant = nil
+	local marks = {}
+	if entry.link then
+		marks, widget.enchant = GearCheck.UI.SlotMarks(entry, found and found.kinds)
+	end
+	for index = 1, #widget.marks do
+		local texture = widget.marks[index]
+		local mark = marks[index]
+		if mark then
+			-- Von rechts nach links, damit die Reihenfolge links beginnt und rechts endet.
+			texture:ClearAllPoints()
+			texture:SetPoint("TOPRIGHT", widget, "TOPRIGHT", -2 - (#marks - index) * 14, -17)
+			GearCheck.UI.PaintMark(texture, mark)
+		else
+			texture:Hide()
+		end
+	end
 end
 
 function InspectView:Polish()
@@ -990,7 +1037,7 @@ function InspectView:RenderPage()
 	local nameWidth = math.max(rowWidth - 116, 40)
 	local gear = record and record.status == "done" and record.gear
 	local grouped = issuesBySlot(record)
-	local used = {}
+	local slotFound = GearCheck.UI.SlotFindings(record)
 	local playerRole = record and record.role
 	local y = 0
 	local content = self.pageContent
@@ -1019,29 +1066,26 @@ function InspectView:RenderPage()
 		if not entry then
 			widget:Hide()
 		else
-			local slotIssues = grouped[entry.name]
-			local issueText = slotIssues and table.concat(slotIssues, "\n") or ""
-			if entry.key == "HeadSlot" and record.meta and record.meta.summary then
-				local metaLine
-				if record.meta.active then
-					metaLine = "|cff1eff1e" .. record.meta.summary .. "|r"
-				else
-					metaLine = "|cffff3333" .. record.meta.summary .. "|r"
-				end
-				local inactiveText = GearCheck:T("META_INACTIVE")
-				if issueText == inactiveText then
-					issueText = metaLine
-				elseif issueText ~= "" then
-					issueText = metaLine .. "\n" .. string.gsub(issueText, inactiveText .. "\n?", "")
-				else
-					issueText = metaLine
+			local lines = {}
+			-- Am Kopf steht der Meta-Status; „Meta inaktiv“ als Befund wäre dann doppelt.
+			local metaHere = entry.key == "HeadSlot" and record.meta and record.meta.summary
+			if metaHere then
+				local color = record.meta.active and "|cff1eff1e" or "|cffff3333"
+				lines[1] = color .. record.meta.summary .. "|r"
+			end
+			local inactiveText = GearCheck:T("META_INACTIVE")
+			local slotIssues = grouped[entry.name] or {}
+			for issueIndex = 1, #slotIssues do
+				local issue = slotIssues[issueIndex]
+				if not (metaHere and issue.text == inactiveText) then
+					lines[#lines + 1] = issue.colored
 				end
 			end
-			used[entry.name] = true
+			local issueText = table.concat(lines, "\n")
 			widget.name:SetWidth(nameWidth)
 			widget.role:SetWidth(math.max(nameWidth - 36, 40))
 			widget.issues:SetWidth(nameWidth)
-			paintGearRow(widget, entry, issueText, playerRole)
+			paintGearRow(widget, entry, issueText, playerRole, slotFound[entry.name])
 			local issueHeight = 0
 			if issueText ~= "" then
 				issueHeight = widget.issues:GetStringHeight() or 0
@@ -1077,35 +1121,11 @@ function InspectView:RenderPage()
 	findingsRule:Show()
 	y = y + 6
 
+	-- Dieselbe Befundliste wie im Hauptfenster (Loot zuerst, dann Hinweise, mit Icons).
 	local findings = {}
-	if record and record.status == "done" then
-		if record.meta and record.meta.summary then
-			if record.meta.active then
-				findings[#findings + 1] = "|cff1eff1e" .. record.meta.summary .. "|r"
-			else
-				findings[#findings + 1] = "|cffff3333" .. record.meta.summary .. "|r"
-			end
-		end
-		if not record.issues or #record.issues == 0 then
-			if #findings == 0 then
-				findings[1] = "|cff1eff1e" .. GearCheck:T("NO_ISSUES") .. "|r"
-			end
-		else
-			for index = 1, #record.issues do
-				local issue = record.issues[index]
-				if not (record.meta and not record.meta.active and issue.text == GearCheck:T("META_INACTIVE")) then
-					local color = issue.loot and "|cffff3333" or "|cffffff80"
-					findings[#findings + 1] = color .. issue.slot .. ":|r " .. issue.text
-				end
-			end
-		end
-	end
-	for name, list in pairs(grouped) do
-		if not used[name] then
-			for index = 1, #list do
-				findings[#findings + 1] = "|cffff3333" .. name .. ":|r " .. list[index]
-			end
-		end
+	local findingsText = GearCheck.UI:IssuesText(record, true)
+	if findingsText ~= "" then
+		findings[1] = findingsText
 	end
 
 	local leftover = self.pageLeftover
@@ -1116,7 +1136,11 @@ function InspectView:RenderPage()
 		leftover:SetText(table.concat(findings, "\n"))
 		local extraHeight = leftover:GetStringHeight() or 0
 		if extraHeight < 1 then
-			extraHeight = #findings * 12
+			local count = 1
+			for _ in string.gmatch(findings[1], "\n") do
+				count = count + 1
+			end
+			extraHeight = count * 12
 		end
 		y = y + extraHeight + 4
 	else
